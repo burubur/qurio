@@ -1,0 +1,52 @@
+version: '3.8'
+services:
+  weaviate:
+    image: semitechnologies/weaviate:1.24.10
+    ports: ["8080:8080"]
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      CLUSTER_HOSTNAME: 'node1'
+  
+  postgres:
+    image: postgres:15-alpine
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_USER: qurio
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: qurio
+  
+  nsqlookupd:
+    image: nsqio/nsq
+    command: /nsqlookupd
+    ports:
+      - "4160:4160"
+      - "4161:4161"
+  
+  nsqd:
+    image: nsqio/nsq
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160
+    depends_on: [nsqlookupd]
+    ports:
+      - "4150:4150"
+      - "4151:4151"
+
+  docling:
+    build: ./services/docling
+    ports: ["8000:8000"]
+  
+  backend:
+    build: ./apps/backend
+    ports: ["8081:8081"]
+    environment:
+      - DB_HOST=postgres
+      - WEAVIATE_HOST=weaviate:8080
+      - NSQ_LOOKUPD=nsqlookupd:4161
+    depends_on: [postgres, weaviate, nsqd]
+
+  frontend:
+    build: ./apps/frontend
+    ports: ["3000:80"]
+    depends_on: [backend]

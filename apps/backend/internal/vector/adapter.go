@@ -1,0 +1,24 @@
+package vector
+
+import (
+	"context"
+
+	"github.com/weaviate/weaviate/entities/models"
+	"github.com/weaviate/weaviate-go-client/v5/weaviate"
+)
+
+type WeaviateClientAdapter struct {
+	Client *weaviate.Client
+}
+
+func NewWeaviateClientAdapter(client *weaviate.Client) *WeaviateClientAdapter {
+	return &WeaviateClientAdapter{Client: client}
+}
+
+func (a *WeaviateClientAdapter) ClassExists(ctx context.Context, className string) (bool, error) {
+	return a.Client.Schema().ClassExistenceChecker().WithClassName(className).Do(ctx)
+}
+
+func (a *WeaviateClientAdapter) CreateClass(ctx context.Context, class *models.Class) error {
+	return a.Client.Schema().ClassCreator().WithClass(class).Do(ctx)
+}

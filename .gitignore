@@ -1,0 +1,47 @@
+# General
+.env
+.DS_Store
+Thumbs.db
+*.log
+tmp/
+temp/
+
+# IDEs
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# Go (Backend)
+apps/backend/bin/
+apps/backend/backend
+*.exe
+*.test
+*.out
+go.work.sum
+
+# Python (Docling Service)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# Node.js (Frontend)
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+
+# Docker
+.docker/
+
+# Gemini/Serena specific
+.gemini/tmp/
