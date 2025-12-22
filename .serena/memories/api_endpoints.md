@@ -19,7 +19,9 @@ Base URL: `/api` (Proxied via Nginx to Backend :8081)
 ## MCP (Model Context Protocol)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/mcp` | JSON-RPC 2.0 Endpoint for AI Agents |
+| `POST` | `/mcp` | Legacy JSON-RPC 2.0 Endpoint |
+| `GET` | `/mcp/sse` | SSE Transport Connection (Yields Session ID) |
+| `POST` | `/mcp/messages` | Send JSON-RPC Messages (Requires `?sessionId=...`) |
 
 ## Health
 | Method | Endpoint | Description |

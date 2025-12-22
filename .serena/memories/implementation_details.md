@@ -31,12 +31,22 @@
 ## Backend Architecture
 -   **Pattern:** Feature-based (`features/source`), Internal-based (`internal/settings`, `internal/worker`).
 -   **Service/Repo:** Interface-based dependency injection.
--   **Worker:** NSQ consumer for ingestion tasks.
--   **Logging:** `log/slog` (Standardized across all modules).
--   **Error Handling:**
-    -   **Format:** JSON Envelope (`{ error: { code, message }, correlationId }`).
-    -   **MCP:** Compliant with JSON-RPC 2.0 error codes.
-    -   **Health:** `/health` returns JSON `{"status": "ok"}`.
--   **Resilience:**
-    -   **Timeouts:** Enforced on all external clients (e.g., Docling: 30s).
+	-	**Worker:** NSQ consumer for ingestion tasks.
+	-	**Logging:**
+		-	**Application:** `log/slog` (Standardized across all modules).
+		-	**Query:** `QueryLogger` (JSON, `data/logs/query.log` + stdout).
+	-	**Error Handling:**
+		-	**Format:** JSON Envelope (`{ error: { code, message }, correlationId }`).
+		-	**MCP:** Compliant with JSON-RPC 2.0 error codes.
+		-	**Health:** `/health` returns JSON `{"status": "ok"}`.
+	-	**Retrieval:**
+		-	**Types:** `SearchResult` with `Content`, `Score`, `Metadata`.
+		-	**Pipeline:** Embed -> Hybrid Search (Weaviate) -> Rerank (Optional).
+		-	**MCP:**
+			-	**Transport:** SSE (`GET /mcp/sse`) + POST (`POST /mcp/messages`).
+			-	**Protocol:** Compliant with MCP spec (no notifications response, absolute URLs).
+			-	**Tools:** Exposes `search` tool via `tools/list` and `tools/call`.
+	-	**Resilience:**
+		-	**Timeouts:** Enforced on all external clients (e.g., Docling: 30s).
+		-	**Ingestion:** 'ingest' topic pre-created on startup to prevent consumer race conditions.
     -   **DLQ:** Failed ingestion messages moved to `ingestion_dlq` after 3 attempts.

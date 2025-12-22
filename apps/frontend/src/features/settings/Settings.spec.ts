@@ -26,4 +26,23 @@ describe('Settings.vue', () => {
     await wrapper.find('button').trigger('click')
     expect(store.updateSettings).toHaveBeenCalled()
   })
+
+  it('shows api key input only when reranker provider is selected', async () => {
+    const wrapper = mount(Settings, {
+      global: {
+        plugins: [createTestingPinia({ stubActions: false, createSpy: vi.fn })],
+      },
+    })
+    const store = useSettingsStore()
+    
+    // Initial state: none
+    store.rerankProvider = 'none'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('#apiKey').exists()).toBe(false)
+    
+    // Change to jina
+    store.rerankProvider = 'jina'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('#apiKey').exists()).toBe(true)
+  })
 })

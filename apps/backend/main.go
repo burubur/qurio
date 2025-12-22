@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -127,6 +128,33 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Pre-create 'ingest' topic to avoid consumer startup errors
+	// NSQ creates topics lazily on publish, but consumers querying lookupd will fail 404 until then.
+	// We hit the nsqd http api to create it explicitly.
+	// cfg.NSQDHost is "nsqd:4150" (TCP), we need HTTP port 4151
+	// Assuming nsqd host is resolvable and port 4151 is standard
+	nsqHttpURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest", "nsqd")
+	// If NSQDHost contains port, strip it. Usually "host:port"
+	host, _, _ := net.SplitHostPort(cfg.NSQDHost)
+	if host != "" {
+		nsqHttpURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest", host)
+	}
+	
+	// Fire and forget topic creation
+	go func() {
+		// Wait for nsqd to be ready
+		time.Sleep(2 * time.Second)
+		resp, err := http.Post(nsqHttpURL, "application/json", nil)
+		if err != nil {
+			slog.Warn("failed to pre-create ingest topic", "error", err, "url", nsqHttpURL)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				slog.Info("ingest topic pre-created successfully")
+			}
+		}
+	}()
+
 	// Feature: Source
 	sourceRepo := source.NewPostgresRepo(db)
 	sourceService := source.NewService(sourceRepo, nsqProducer)
@@ -166,9 +194,19 @@ func main() {
 	http.HandleFunc("PUT /settings", enableCORS(settingsHandler.UpdateSettings))
 
 	// Feature: Retrieval & MCP
-	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient)
+	queryLogger, err := retrieval.NewFileQueryLogger("data/logs/query.log")
+	if err != nil {
+		slog.Warn("failed to create query logger, falling back to stdout", "error", err)
+		queryLogger = retrieval.NewQueryLogger(os.Stdout)
+	}
+
+	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient, queryLogger)
 	mcpHandler := mcp.NewHandler(retrievalService)
-	http.Handle("/mcp", mcpHandler)
+	http.Handle("/mcp", mcpHandler) // Legacy POST endpoint
+	
+	// New SSE Endpoints
+	http.HandleFunc("GET /mcp/sse", enableCORS(mcpHandler.HandleSSE))
+	http.HandleFunc("POST /mcp/messages", enableCORS(mcpHandler.HandleMessage))
 
 	// Worker (Ingest)
 	ingestHandler := worker.NewIngestHandler(doclingClient, geminiEmbedder, vecStore, nsqProducer, sourceRepo)

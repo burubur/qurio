@@ -3,20 +3,29 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
+	"qurio/apps/backend/internal/retrieval"
+	"github.com/google/uuid"
 )
 
 type Retriever interface {
-	Search(ctx context.Context, query string) ([]string, error)
+	Search(ctx context.Context, query string) ([]retrieval.SearchResult, error)
 }
 
 type Handler struct {
-	retriever Retriever
+	retriever    Retriever
+	sessions     map[string]chan string // sessionId -> message channel (serialized JSON-RPC response)
+	sessionsLock sync.RWMutex
 }
 
 func NewHandler(r Retriever) *Handler {
-	return &Handler{retriever: r}
+	return &Handler{
+		retriever: r,
+		sessions:  make(map[string]chan string),
+	}
 }
 
 // JSON-RPC Request types
@@ -34,6 +43,16 @@ type CallParams struct {
 
 type SearchArgs struct {
 	Query string `json:"query"`
+}
+
+type Tool struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	InputSchema interface{} `json:"inputSchema"`
+}
+
+type ListToolsResult struct {
+	Tools []Tool `json:"tools"`
 }
 
 // JSON-RPC Response
@@ -62,6 +81,133 @@ const (
 	ErrInternal       = -32603
 )
 
+// processRequest processes the JSON-RPC request and returns a response.
+// Returns nil if no response should be sent (e.g. for notifications).
+func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONRPCResponse {
+	if req.Method == "initialize" {
+		return &JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: map[string]interface{}{
+				"protocolVersion": "2024-11-05",
+				"capabilities": map[string]interface{}{
+					"tools": map[string]interface{}{},
+				},
+				"serverInfo": map[string]interface{}{
+					"name":    "qurio-mcp",
+					"version": "1.0.0",
+				},
+			},
+		}
+	}
+
+	if req.Method == "notifications/initialized" {
+		// Notifications must not generate a response
+		return nil
+	}
+
+	if req.Method == "tools/list" {
+		return &JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: ListToolsResult{
+				Tools: []Tool{
+					{
+						Name:        "search",
+						Description: "Search documentation and knowledge base",
+						InputSchema: map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"query": map[string]string{
+									"type":        "string",
+									"description": "The search query",
+								},
+							},
+							"required": []string{"query"},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	if req.Method == "tools/call" {
+		var params CallParams
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			slog.Warn("invalid params structure", "error", err)
+			resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid params")
+			return &resp
+		}
+
+		if params.Name == "search" {
+			var args SearchArgs
+			if err := json.Unmarshal(params.Arguments, &args); err != nil {
+				slog.Warn("invalid search arguments", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid search arguments")
+				return &resp
+			}
+
+			results, err := h.retriever.Search(ctx, args.Query)
+			if err != nil {
+				slog.Error("search failed", "error", err)
+				return &JSONRPCResponse{
+					JSONRPC: "2.0",
+					ID:      req.ID,
+					Result: ToolResult{
+						Content: []ToolContent{{Type: "text", Text: "Error: " + err.Error()}},
+						IsError: true,
+					},
+				}
+			}
+			
+			var textResult string
+			if len(results) == 0 {
+				textResult = "No results found."
+			} else {
+				for i, res := range results {
+					textResult += fmt.Sprintf("Result %d (Score: %.2f):\n%s\n", i+1, res.Score, res.Content)
+					if len(res.Metadata) > 0 {
+						meta, _ := json.Marshal(res.Metadata)
+						textResult += fmt.Sprintf("Metadata: %s\n", string(meta))
+					}
+					textResult += "\n---\n"
+				}
+			}
+
+			slog.Info("tool execution completed", "tool", "search", "result_count", len(results))
+
+			return &JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result: ToolResult{
+					Content: []ToolContent{
+						{Type: "text", Text: textResult},
+					},
+				},
+			}
+		}
+		
+		slog.Warn("method not found", "method", params.Name)
+		resp := makeErrorResponse(req.ID, ErrMethodNotFound, "Method not found: "+params.Name)
+		return &resp
+	}
+	
+	slog.Warn("unknown jsonrpc method", "method", req.Method)
+	resp := makeErrorResponse(req.ID, ErrMethodNotFound, "Method not found")
+	return &resp
+}
+
+func makeErrorResponse(id interface{}, code int, message string) JSONRPCResponse {
+	return JSONRPCResponse{
+		JSONRPC: "2.0",
+		Error: map[string]interface{}{
+			"code":    code,
+			"message": message,
+		},
+		ID: id,
+	}
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	slog.Info("mcp request received", "method", r.Method, "path", r.URL.Path)
 	
@@ -71,69 +217,142 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Minimal implementation for 'tools/call' method
-	if req.Method == "tools/call" {
-		var params CallParams
-		if err := json.Unmarshal(req.Params, &params); err != nil {
-			slog.Warn("invalid params structure", "error", err)
-			h.writeError(w, req.ID, ErrInvalidParams, "Invalid params")
+	resp := h.processRequest(r.Context(), req)
+	if resp != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	} else {
+		// Notification, just return OK
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// HandleSSE establishes the SSE connection and manages the session
+func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
+	// 1. Set SSE Headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// 2. Create Session
+	sessionID := uuid.New().String()
+	msgChan := make(chan string, 10) // Buffer for pending messages
+
+	h.sessionsLock.Lock()
+	h.sessions[sessionID] = msgChan
+	h.sessionsLock.Unlock()
+
+	// Cleanup on disconnect
+	defer func() {
+		h.sessionsLock.Lock()
+		delete(h.sessions, sessionID)
+		h.sessionsLock.Unlock()
+		close(msgChan)
+		slog.Info("sse session ended", "session_id", sessionID)
+	}()
+
+	slog.Info("sse session started", "session_id", sessionID)
+
+	// 3. Send 'endpoint' event
+	// Construct absolute URL for client compatibility
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	endpoint := fmt.Sprintf("%s://%s/mcp/messages?sessionId=%s", scheme, r.Host, sessionID)
+	
+	fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", endpoint)
+	w.(http.Flusher).Flush()
+	
+	// Send 'id' event (Optional but good practice if client expects it)
+	fmt.Fprintf(w, "event: id\ndata: %s\n\n", sessionID)
+	w.(http.Flusher).Flush()
+
+	// 4. Loop: Send messages from channel to SSE stream
+	for {
+		select {
+		case msg, ok := <-msgChan:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
+			w.(http.Flusher).Flush()
+		case <-r.Context().Done():
 			return
 		}
+	}
+}
 
-		if params.Name == "search" {
-			var args SearchArgs
-			if err := json.Unmarshal(params.Arguments, &args); err != nil {
-				slog.Warn("invalid search arguments", "error", err)
-				h.writeError(w, req.ID, ErrInvalidParams, "Invalid search arguments")
-				return
-			}
+// HandleMessage accepts POST messages associated with a session
+func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
+	slog.Info("mcp message received", "method", r.Method, "path", r.URL.Path)
 
-			results, err := h.retriever.Search(r.Context(), args.Query)
-			if err != nil {
-				slog.Error("search failed", "error", err)
-				// Return tool error result, not protocol error, if the tool execution failed
-				// OR return Internal Error depending on strictness. 
-				// MCP usually prefers returning a ToolResult with isError=true for tool failures.
-				response := JSONRPCResponse{
-					JSONRPC: "2.0",
-					ID:      req.ID,
-					Result: ToolResult{
-						Content: []ToolContent{{Type: "text", Text: "Error: " + err.Error()}},
-						IsError: true,
-					},
-				}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-			
-			textResult := "No results"
-			if len(results) > 0 {
-				textResult = results[0] // Simplify
-			}
+	sessionID := r.URL.Query().Get("sessionId")
+	if sessionID == "" {
+		slog.Warn("missing sessionId in message request")
+		http.Error(w, "Missing sessionId", http.StatusBadRequest)
+		return
+	}
 
-			slog.Info("tool execution completed", "tool", "search", "result_count", len(results))
+	h.sessionsLock.RLock()
+	msgChan, exists := h.sessions[sessionID]
+	h.sessionsLock.RUnlock()
 
-			response := JSONRPCResponse{
-				JSONRPC: "2.0",
-				ID:      req.ID,
-				Result: ToolResult{
-					Content: []ToolContent{
-						{Type: "text", Text: textResult},
-					},
-				},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+	if !exists {
+		slog.Warn("session not found", "session_id", sessionID)
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	var req JSONRPCRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.Warn("invalid json in message request", "error", err)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// MCP Spec: Return 202 Accepted immediately
+	w.WriteHeader(http.StatusAccepted)
+	
+	// Process asynchronously
+	go func() {
+		resp := h.processRequest(context.Background(), req)
+		if resp == nil {
+			// Notification, no response needed
 			return
 		}
 		
-		slog.Warn("method not found", "method", params.Name)
-		h.writeError(w, req.ID, ErrMethodNotFound, "Method not found: "+params.Name)
-		return
-	}
-	
-	slog.Warn("unknown jsonrpc method", "method", req.Method)
-	h.writeError(w, req.ID, ErrMethodNotFound, "Method not found")
+		// Serialize response
+		respBytes, err := json.Marshal(resp)
+		if err != nil {
+			slog.Error("failed to marshal response", "error", err)
+			return
+		}
+
+		// Send to SSE channel safely
+		h.sessionsLock.RLock()
+		defer h.sessionsLock.RUnlock()
+		
+		// Re-check existence under lock to avoid sending to closed channel
+		// Although msgChan is a local var, the channel itself might be closed by HandleSSE
+		// Wait, we can't easily check if channel is closed without a separate status or context.
+		// BUT HandleSSE removes it from map THEN closes it.
+		// So if it's in the map, it's open (mostly, race window is small but exists if we just check map).
+		// Better: HandleSSE should not close the channel directly if writers exist, or writers should recover panic.
+		// Simplest fix for now: Recover panic if channel is closed.
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Warn("failed to send to sse channel (closed)", "session_id", sessionID, "error", r)
+			}
+		}()
+
+		select {
+		case msgChan <- string(respBytes):
+		default:
+			slog.Warn("session channel full, dropping message", "session_id", sessionID)
+		}
+	}()
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, id interface{}, code int, message string) {
