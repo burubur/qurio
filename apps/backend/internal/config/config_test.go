@@ -19,7 +19,7 @@ func TestLoadConfig(t *testing.T) {
 
 func TestLoadConfig_FromEnvFile(t *testing.T) {
 	// Create a temp .env file
-	content := []byte("GEMINI_KEY=loaded-from-file")
+	content := []byte("DB_HOST=loaded-from-file")
 	err := os.WriteFile(".env", content, 0644)
 	if err != nil {
 		t.Fatal(err)
@@ -28,5 +28,5 @@ func TestLoadConfig_FromEnvFile(t *testing.T) {
 
 	cfg, err := config.Load()
 	assert.NoError(t, err)
-	assert.Equal(t, "loaded-from-file", cfg.GeminiKey)
+	assert.Equal(t, "loaded-from-file", cfg.DBHost)
 }

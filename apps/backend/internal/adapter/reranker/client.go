@@ -28,14 +28,19 @@ func (c *Client) SetBaseURL(url string) {
 	c.baseURL = url
 }
 
-func (c *Client) Rerank(ctx context.Context, query string, docs []string) ([]string, error) {
+func (c *Client) Rerank(ctx context.Context, query string, docs []string) ([]int, error) {
 	if c.provider == "jina" {
 		return c.rerankJina(ctx, query, docs)
 	}
-	return docs, nil
+	// Return identity indices
+	indices := make([]int, len(docs))
+	for i := range indices {
+		indices[i] = i
+	}
+	return indices, nil
 }
 
-func (c *Client) rerankJina(ctx context.Context, query string, docs []string) ([]string, error) {
+func (c *Client) rerankJina(ctx context.Context, query string, docs []string) ([]int, error) {
 	url := "https://api.jina.ai/v1/rerank"
 	if c.baseURL != "" {
 		url = c.baseURL
@@ -77,15 +82,12 @@ func (c *Client) rerankJina(ctx context.Context, query string, docs []string) ([
 		return nil, err
 	}
 
-	reranked := make([]string, 0, len(docs))
+	indices := make([]int, 0, len(docs))
 	for _, r := range result.Results {
 		if r.Index < len(docs) {
-			reranked = append(reranked, docs[r.Index])
+			indices = append(indices, r.Index)
 		}
 	}
 	
-	// Add remaining docs? Usually reranker returns all or top N. 
-	// If API returns top N, we only return top N.
-	
-	return reranked, nil
+	return indices, nil
 }

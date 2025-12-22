@@ -55,11 +55,40 @@ export const useSourceStore = defineStore('sources', () => {
     }
   }
 
+  async function deleteSource(id: string) {
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await fetch(`/api/sources/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(`Failed to delete source: ${res.statusText}`)
+      sources.value = sources.value.filter(s => s.id !== id)
+    } catch (e: any) {
+      error.value = e.message || 'Unknown error'
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function resyncSource(id: string) {
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await fetch(`/api/sources/${id}/resync`, { method: 'POST' })
+      if (!res.ok) throw new Error(`Failed to resync source: ${res.statusText}`)
+    } catch (e: any) {
+      error.value = e.message || 'Unknown error'
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return { 
     sources, 
     isLoading, 
     error, 
     fetchSources, 
-    addSource 
+    addSource,
+    deleteSource,
+    resyncSource
   }
 })

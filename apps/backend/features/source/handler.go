@@ -54,3 +54,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(sources)
 }
+
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := h.service.Delete(r.Context(), id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) ReSync(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := h.service.ReSync(r.Context(), id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}

@@ -38,6 +38,24 @@ func (m *MockRepo) UpdateStatus(ctx context.Context, id, status string) error {
 	return args.Error(0)
 }
 
+func (m *MockRepo) Get(ctx context.Context, id string) (*source.Source, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*source.Source), args.Error(1)
+}
+
+func (m *MockRepo) UpdateBodyHash(ctx context.Context, id, hash string) error {
+	args := m.Called(ctx, id, hash)
+	return args.Error(0)
+}
+
+func (m *MockRepo) SoftDelete(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
 type MockPublisher struct {
 	mock.Mock
 }
@@ -91,4 +109,33 @@ func TestCreateSource_Duplicate(t *testing.T) {
 	// Save and Publish should NOT be called
 	repo.AssertNotCalled(t, "Save", mock.Anything, mock.Anything)
 	pub.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+}
+
+func TestDeleteSource(t *testing.T) {
+	repo := new(MockRepo)
+	pub := new(MockPublisher)
+	svc := source.NewService(repo, pub)
+
+	id := "some-id"
+	repo.On("SoftDelete", mock.Anything, id).Return(nil)
+
+	err := svc.Delete(context.Background(), id)
+	assert.NoError(t, err)
+	repo.AssertExpectations(t)
+}
+
+func TestReSyncSource(t *testing.T) {
+	repo := new(MockRepo)
+	pub := new(MockPublisher)
+	svc := source.NewService(repo, pub)
+
+	id := "some-id"
+	src := &source.Source{ID: id, URL: "http://example.com"}
+
+	repo.On("Get", mock.Anything, id).Return(src, nil)
+	pub.On("Publish", "ingest", mock.Anything).Return(nil)
+
+	err := svc.ReSync(context.Background(), id)
+	assert.NoError(t, err)
+	repo.AssertExpectations(t)
 }

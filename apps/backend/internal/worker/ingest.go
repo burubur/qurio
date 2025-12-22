@@ -2,7 +2,9 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/nsqio/go-nsq"
@@ -34,6 +36,7 @@ type Producer interface {
 
 type SourceStatusUpdater interface {
 	UpdateStatus(ctx context.Context, id, status string) error
+	UpdateBodyHash(ctx context.Context, id, hash string) error
 }
 
 type IngestHandler struct {
@@ -86,6 +89,15 @@ func (h *IngestHandler) HandleMessage(m *nsq.Message) error {
 		log.Printf("Fetch failed for %s: %v", payload.URL, err)
 		// Don't mark failed yet, let NSQ retry
 		return err 
+	}
+
+	// 1.5 Update Hash
+	if payload.ID != "" {
+		hash := sha256.Sum256([]byte(content))
+		hashStr := fmt.Sprintf("%x", hash)
+		if err := h.updater.UpdateBodyHash(ctx, payload.ID, hashStr); err != nil {
+			log.Printf("Failed to update body hash: %v", err)
+		}
 	}
 
 	// 2. Chunk

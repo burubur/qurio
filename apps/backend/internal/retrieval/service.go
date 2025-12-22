@@ -13,7 +13,7 @@ type VectorStore interface {
 }
 
 type Reranker interface {
-	Rerank(ctx context.Context, query string, docs []string) ([]string, error)
+	Rerank(ctx context.Context, query string, docs []string) ([]int, error)
 }
 
 type Service struct {
@@ -42,7 +42,18 @@ func (s *Service) Search(ctx context.Context, query string) ([]string, error) {
 
 	// 3. Rerank (if configured)
 	if s.reranker != nil && len(docs) > 0 {
-		return s.reranker.Rerank(ctx, query, docs)
+		indices, err := s.reranker.Rerank(ctx, query, docs)
+		if err != nil {
+			return nil, err
+		}
+		
+		reranked := make([]string, len(indices))
+		for i, idx := range indices {
+			if idx < len(docs) {
+				reranked[i] = docs[idx]
+			}
+		}
+		return reranked, nil
 	}
 
 	return docs, nil

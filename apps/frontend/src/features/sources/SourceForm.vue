@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useSourceStore } from './source.store'
+import { Plus, Loader2 } from 'lucide-vue-next'
 
 const store = useSourceStore()
 const url = ref('')
@@ -13,7 +14,7 @@ async function submit() {
   try {
     new URL(url.value)
   } catch {
-    alert('Please enter a valid URL')
+    alert('Please enter a valid URL (e.g., https://docs.example.com)')
     return
   }
 
@@ -27,11 +28,11 @@ async function submit() {
 
 <template>
   <form @submit.prevent="submit" class="source-form">
-    <div class="input-group">
+    <div class="input-wrapper">
       <input 
         v-model="url" 
         type="text" 
-        placeholder="https://example.com" 
+        placeholder="https://docs.example.com" 
         :disabled="store.isLoading"
         class="url-input"
       />
@@ -40,61 +41,96 @@ async function submit() {
         :disabled="store.isLoading"
         class="submit-btn"
       >
-        <span v-if="store.isLoading">Adding...</span>
-        <span v-else>Add Source</span>
+        <Loader2 v-if="store.isLoading" class="spin" :size="18" />
+        <Plus v-else :size="18" />
+        <span>Ingest</span>
       </button>
     </div>
-    <p v-if="store.error" class="error-msg">{{ store.error }}</p>
+    <div v-if="store.error" class="error-msg">
+      <span class="error-icon">!</span>
+      {{ store.error }}
+    </div>
   </form>
 </template>
 
 <style scoped>
 .source-form {
-  margin-top: 1rem;
+  width: 100%;
 }
 
-.input-group {
+.input-wrapper {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  background: var(--color-void);
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s;
+}
+
+.input-wrapper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .url-input {
   flex: 1;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
+  background: transparent;
+  border: none;
+  padding: 0.5rem 1rem;
+  color: var(--color-text-main);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+}
+
+.url-input::placeholder {
+  color: var(--color-border);
 }
 
 .url-input:focus {
   outline: none;
-  border-color: #3498db;
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 .submit-btn {
-  padding: 0.75rem 1.5rem;
-  background-color: #3498db;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  background-color: var(--color-primary);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-weight: bold;
-  transition: background-color 0.2s;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
 }
 
 .submit-btn:hover:not(:disabled) {
-  background-color: #2980b9;
+  background-color: var(--color-primary-hover);
 }
 
 .submit-btn:disabled {
-  background-color: #95a5a6;
+  background-color: var(--color-border);
+  color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .error-msg {
-  color: #e74c3c;
-  margin-top: 0.5rem;
-  font-size: 0.9rem;
+  margin-top: 0.75rem;
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
 }
 </style>

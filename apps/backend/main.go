@@ -17,6 +17,7 @@ import (
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/vector"
+	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -112,75 +113,65 @@ func main() {
 		log.Fatalf("Failed to create NSQ producer: %v", err)
 	}
 
-	// Reranker Adapter
-	var rerankerClient retrieval.Reranker
-	if cfg.RerankAPIKey != "" {
-		rerankerClient = reranker.NewClient(cfg.RerankProvider, cfg.RerankAPIKey)
-		log.Printf("Reranker enabled: %s", cfg.RerankProvider)
-	} else {
-		log.Println("Reranker disabled (no API key)")
-	}
-
-	// Embedder (Optional on startup, but needed for worker/retrieval)
-	var geminiEmbedder *gemini.Embedder
-	if cfg.GeminiKey != "" {
-		geminiEmbedder, err = gemini.NewEmbedder(context.Background(), cfg.GeminiKey)
-		if err != nil {
-			log.Printf("Failed to init Gemini: %v", err)
-		}
-	} else {
-		log.Println("GEMINI_KEY not set, embeddings disabled")
-	}
-
 	// Feature: Source
 	sourceRepo := source.NewPostgresRepo(db)
 	sourceService := source.NewService(sourceRepo, nsqProducer)
 	sourceHandler := source.NewHandler(sourceService)
-	http.HandleFunc("/sources", func(w http.ResponseWriter, r *http.Request) {
-		// Enable CORS
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
+	// Feature: Settings
+	settingsRepo := settings.NewPostgresRepo(db)
+	settingsService := settings.NewService(settingsRepo)
+	settingsHandler := settings.NewHandler(settingsService)
+
+	// Adapters: Dynamic
+	geminiEmbedder := gemini.NewDynamicEmbedder(settingsService)
+	rerankerClient := reranker.NewDynamicClient(settingsService)
+
+	// Middleware: CORS
+	enableCORS := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next(w, r)
 		}
-
-		if r.Method == "POST" {
-			sourceHandler.Create(w, r)
-		} else if r.Method == "GET" {
-			sourceHandler.List(w, r)
-		}
-	})
-
-	// Feature: Retrieval & MCP
-	if geminiEmbedder != nil {
-		// Pass reranker (can be nil)
-		retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient)
-		mcpHandler := mcp.NewHandler(retrievalService)
-		http.Handle("/mcp", mcpHandler)
 	}
 
+	// Routes
+	http.HandleFunc("POST /sources", enableCORS(sourceHandler.Create))
+	http.HandleFunc("GET /sources", enableCORS(sourceHandler.List))
+	http.HandleFunc("DELETE /sources/{id}", enableCORS(sourceHandler.Delete))
+	http.HandleFunc("POST /sources/{id}/resync", enableCORS(sourceHandler.ReSync))
+
+	http.HandleFunc("GET /settings", enableCORS(settingsHandler.GetSettings))
+	http.HandleFunc("PUT /settings", enableCORS(settingsHandler.UpdateSettings))
+
+	// Feature: Retrieval & MCP
+	retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient)
+	mcpHandler := mcp.NewHandler(retrievalService)
+	http.Handle("/mcp", mcpHandler)
+
 	// Worker (Ingest)
-	if geminiEmbedder != nil {
-		// Pass nsqProducer and sourceRepo
-		ingestHandler := worker.NewIngestHandler(doclingClient, geminiEmbedder, vecStore, nsqProducer, sourceRepo)
-		
-		nsqCfg := nsq.NewConfig()
-		consumer, err := nsq.NewConsumer("ingest", "channel", nsqCfg)
-		if err != nil {
-			log.Printf("Failed to create NSQ consumer: %v", err)
+	ingestHandler := worker.NewIngestHandler(doclingClient, geminiEmbedder, vecStore, nsqProducer, sourceRepo)
+	
+	nsqCfg = nsq.NewConfig()
+	consumer, err := nsq.NewConsumer("ingest", "channel", nsqCfg)
+	if err != nil {
+		log.Printf("Failed to create NSQ consumer: %v", err)
+	} else {
+		consumer.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
+			return ingestHandler.HandleMessage(m)
+		}))
+		// Connect to Lookupd
+		if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
+			log.Printf("Failed to connect to NSQLookupd: %v", err)
 		} else {
-			consumer.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
-				return ingestHandler.HandleMessage(m)
-			}))
-			// Connect to Lookupd
-			if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
-				log.Printf("Failed to connect to NSQLookupd: %v", err)
-			} else {
-				log.Println("NSQ Consumer connected")
-			}
+			log.Println("NSQ Consumer connected")
 		}
 	}
 

@@ -67,9 +67,6 @@ services:
       - DB_HOST=postgres
       - WEAVIATE_HOST=weaviate:8080
       - NSQ_LOOKUPD=nsqlookupd:4161
-      - GEMINI_KEY=${GEMINI_KEY}
-      - RERANK_PROVIDER=${RERANK_PROVIDER:-jina}
-      - RERANK_API_KEY=${RERANK_API_KEY}
       # Point to nsqd directly for producer if needed, or lookupd
       - NSQD_HOST=nsqd:4150
     depends_on:

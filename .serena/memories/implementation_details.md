@@ -1,22 +1,31 @@
-# Implementation Update (2025-12-21)
+# Implementation Details
 
-Completed MVP Refinement tasks:
+## Dynamic Settings & Configuration
+-   **Architecture:** Database-driven configuration for runtime updates.
+-   **Table:** `settings` (Singleton ID=1).
+-   **Fields:** `rerank_provider`, `rerank_api_key`, `gemini_api_key`.
+-   **Adapters:**
+    -   `DynamicEmbedder`: Wraps Gemini client, re-initializes on key change (or per request check).
+    -   `DynamicClient` (Reranker): Switches provider/key dynamically.
+-   **Removal:** Environment variables `GEMINI_KEY`, `RERANK_*` removed from `config.go` and `docker-compose.yml`.
 
-1.  **Ingestion/Chunking:**
-    -   Added `apps/backend/internal/text` package with `Chunk` function (512 tokens, 50 overlap).
-    -   Updated `IngestHandler` to process multiple chunks per source URL.
-    -   Updated `Chunk` struct to include `ChunkIndex`.
+## Source Management
+-   **Deduplication:**
+    -   **URL Hash:** Checked at creation (prevent duplicate URLs).
+    -   **Body Hash:** Calculated (`sha256`) during ingestion, stored in `body_hash` (content change detection).
+-   **Lifecycle:**
+    -   **Soft Delete:** Sets `deleted_at` timestamp. API filters these out.
+    -   **Re-Sync:** Triggers ingestion event with existing ID. Note: Currently may duplicate vector chunks (known limitation).
 
-2.  **Crawling:**
-    -   Updated `Crawler` to discover links from `/sitemap.xml` and `/llms.txt`.
-    -   Discovery runs as a pre-crawl seed expansion.
+## Frontend Architecture
+-   **Framework:** Vue 3 + TypeScript + Vite.
+-   **State Management:** Pinia (`source.store.ts`, `settings.store.ts`).
+-   **Routing:** `vue-router` with history mode.
+-   **Styling:** Custom CSS variables (Brand: Void Black, Cognitive Blue).
+-   **Layout:** `AppLayout` with fixed `Sidebar`.
+-   **Icons:** `lucide-vue-next`.
 
-3.  **Retrieval:**
-    -   Updated `Weaviate.Store` to support Hybrid Search with configurable Alpha.
-    -   Updated `Retrieval.Service` to default Alpha to 0.5.
-    -   Added `Jina` Reranker support via `adapter/reranker`.
-
-4.  **MCP:**
-    -   Verified and tested `search` tool JSON-RPC handler.
-
-All unit/integration tests passed.
+## Backend Architecture
+-   **Pattern:** Feature-based (`features/source`), Internal-based (`internal/settings`, `internal/worker`).
+-   **Service/Repo:** Interface-based dependency injection.
+-   **Worker:** NSQ consumer for ingestion tasks.

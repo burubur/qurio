@@ -12,14 +12,18 @@ type Source struct {
 	ID          string `json:"id"`
 	URL         string `json:"url"`
 	ContentHash string `json:"-"`
+	BodyHash    string `json:"-"`
 	Status      string `json:"status"`
 }
 
 type Repository interface {
 	Save(ctx context.Context, src *Source) error
 	ExistsByHash(ctx context.Context, hash string) (bool, error)
+	Get(ctx context.Context, id string) (*Source, error)
 	List(ctx context.Context) ([]Source, error)
 	UpdateStatus(ctx context.Context, id, status string) error
+	UpdateBodyHash(ctx context.Context, id, hash string) error
+	SoftDelete(ctx context.Context, id string) error
 }
 
 type EventPublisher interface {
@@ -65,4 +69,26 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 
 func (s *Service) List(ctx context.Context) ([]Source, error) {
 	return s.repo.List(ctx)
+}
+
+func (s *Service) Delete(ctx context.Context, id string) error {
+	return s.repo.SoftDelete(ctx, id)
+}
+
+func (s *Service) ReSync(ctx context.Context, id string) error {
+	src, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	payload, _ := json.Marshal(map[string]interface{}{
+		"url":    src.URL,
+		"id":     src.ID,
+		"resync": true,
+	})
+	if err := s.pub.Publish("ingest", payload); err != nil {
+		log.Printf("Failed to publish resync event: %v", err)
+		return err
+	}
+	return nil
 }

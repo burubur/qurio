@@ -1,7 +1,6 @@
 package config
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 
@@ -19,13 +18,9 @@ type Config struct {
 	WeaviateHost   string `envconfig:"WEAVIATE_HOST" default:"localhost:8080"`
 	WeaviateScheme string `envconfig:"WEAVIATE_SCHEME" default:"http"`
 
-	GeminiKey  string `envconfig:"GEMINI_KEY"`
 	DoclingURL string `envconfig:"DOCLING_URL" default:"http://docling:8000"`
 	NSQLookupd string `envconfig:"NSQ_LOOKUPD" default:"nsqlookupd:4161"`
 	NSQDHost   string `envconfig:"NSQD_HOST" default:"nsqd:4150"`
-	
-	RerankProvider string `envconfig:"RERANK_PROVIDER" default:"jina"` // jina, cohere
-	RerankAPIKey   string `envconfig:"RERANK_API_KEY"`
 }
 
 func Load() (*Config, error) {
@@ -38,15 +33,7 @@ func Load() (*Config, error) {
 	rootEnv := filepath.Join(cwd, "../../.env")
 	_ = godotenv.Load(rootEnv)
 	
-	// Also try just "../.env" or simple heuristic if needed, but the above covers common cases
-
 	var cfg Config
 	err := envconfig.Process("", &cfg)
-	
-	// Log warning if critical keys are missing, to help debug
-	if cfg.GeminiKey == "" {
-		log.Println("WARNING: GEMINI_KEY is missing. Ingestion will be disabled.")
-	}
-	
 	return &cfg, err
 }
