@@ -1,24 +1,22 @@
-# Implementation Details
+# Implementation Update (2025-12-21)
 
-## Backend Architecture (Hexagonal/Clean)
+Completed MVP Refinement tasks:
 
-### Core Logic (Internal)
-- **Worker:** `internal/worker` - Handles ingestion (Fetch -> Embed -> Store).
-- **Retrieval:** `internal/retrieval` - Semantic search logic.
-- **Vector:** `internal/vector` - Schema management.
-- **Config:** `internal/config` - Env-based configuration.
+1.  **Ingestion/Chunking:**
+    -   Added `apps/backend/internal/text` package with `Chunk` function (512 tokens, 50 overlap).
+    -   Updated `IngestHandler` to process multiple chunks per source URL.
+    -   Updated `Chunk` struct to include `ChunkIndex`.
 
-### Adapters (Infrastructure)
-- **Gemini:** `internal/adapter/gemini` - Implements `Embedder` using Google GenAI.
-- **Docling:** `internal/adapter/docling` - Implements `Fetcher` via HTTP call to Python service.
-- **Weaviate:** `internal/adapter/weaviate` - Implements `VectorStore` (Store/Search).
-- **Postgres:** `features/source/repo.go` - Implements `Repository`.
+2.  **Crawling:**
+    -   Updated `Crawler` to discover links from `/sitemap.xml` and `/llms.txt`.
+    -   Discovery runs as a pre-crawl seed expansion.
 
-### Wiring
-- `main.go` wires all adapters to services using dependency injection.
-- Conditional initialization: Gemini and NSQ only start if config is present.
+3.  **Retrieval:**
+    -   Updated `Weaviate.Store` to support Hybrid Search with configurable Alpha.
+    -   Updated `Retrieval.Service` to default Alpha to 0.5.
+    -   Added `Jina` Reranker support via `adapter/reranker`.
 
-## Frontend Architecture
-- **Tech:** Vue 3 + TypeScript + Vite.
-- **Testing:** Vitest + Vue Test Utils.
-- **Components:** Feature-based (`features/sources`).
+4.  **MCP:**
+    -   Verified and tested `search` tool JSON-RPC handler.
+
+All unit/integration tests passed.

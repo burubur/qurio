@@ -2,17 +2,24 @@ package source
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"log"
 )
 
 type Source struct {
-	ID  string
-	URL string
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	ContentHash string `json:"-"`
+	Status      string `json:"status"`
 }
 
 type Repository interface {
 	Save(ctx context.Context, src *Source) error
+	ExistsByHash(ctx context.Context, hash string) (bool, error)
+	List(ctx context.Context) ([]Source, error)
+	UpdateStatus(ctx context.Context, id, status string) error
 }
 
 type EventPublisher interface {
@@ -29,17 +36,33 @@ func NewService(repo Repository, pub EventPublisher) *Service {
 }
 
 func (s *Service) Create(ctx context.Context, src *Source) error {
-	// 1. Save to DB
+	// 0. Compute Hash
+	hash := sha256.Sum256([]byte(src.URL))
+	src.ContentHash = fmt.Sprintf("%x", hash)
+
+	// 1. Check Duplicate
+	exists, err := s.repo.ExistsByHash(ctx, src.ContentHash)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return fmt.Errorf("Duplicate detected")
+	}
+
+	// 2. Save to DB
 	if err := s.repo.Save(ctx, src); err != nil {
 		return err
 	}
 
-	// 2. Publish to NSQ
-	payload, _ := json.Marshal(map[string]string{"url": src.URL})
+	// 3. Publish to NSQ
+	payload, _ := json.Marshal(map[string]string{"url": src.URL, "id": src.ID})
 	if err := s.pub.Publish("ingest", payload); err != nil {
 		log.Printf("Failed to publish ingest event: %v", err)
-		// We don't fail the request if publishing fails, but in a real system we might want outbox pattern
 	}
 	
 	return nil
+}
+
+func (s *Service) List(ctx context.Context) ([]Source, error) {
+	return s.repo.List(ctx)
 }

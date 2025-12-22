@@ -9,6 +9,12 @@ services:
       PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
       DEFAULT_VECTORIZER_MODULE: 'none'
       CLUSTER_HOSTNAME: 'node1'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/v1/meta"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
   
   postgres:
     image: postgres:15-alpine
@@ -17,7 +23,12 @@ services:
       POSTGRES_USER: qurio
       POSTGRES_PASSWORD: password
       POSTGRES_DB: qurio
-  
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qurio"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   nsqlookupd:
     image: nsqio/nsq
     command: /nsqlookupd
@@ -27,15 +38,27 @@ services:
   
   nsqd:
     image: nsqio/nsq
-    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160
+    # Use wget instead of curl in the healthcheck as the image might not have curl
+    # The image is nsqio/nsq based on Alpine, it usually has wget
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --broadcast-address=nsqd
     depends_on: [nsqlookupd]
     ports:
       - "4150:4150"
       - "4151:4151"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4151/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   docling:
     build: ./services/docling
     ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
   
   backend:
     build: ./apps/backend
@@ -44,7 +67,18 @@ services:
       - DB_HOST=postgres
       - WEAVIATE_HOST=weaviate:8080
       - NSQ_LOOKUPD=nsqlookupd:4161
-    depends_on: [postgres, weaviate, nsqd]
+      - GEMINI_KEY=${GEMINI_KEY}
+      - RERANK_PROVIDER=${RERANK_PROVIDER:-jina}
+      - RERANK_API_KEY=${RERANK_API_KEY}
+      # Point to nsqd directly for producer if needed, or lookupd
+      - NSQD_HOST=nsqd:4150
+    depends_on:
+      postgres:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+      nsqd:
+        condition: service_healthy
 
   frontend:
     build: ./apps/frontend

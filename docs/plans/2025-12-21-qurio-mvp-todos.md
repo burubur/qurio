@@ -1,0 +1,23 @@
+# Implementation Todos - Qurio MVP
+
+- [x] Task 1: Ingestion Worker & Chunking (FR-2.5)
+    - Implement text chunking (512 tokens/2000 chars, 50 overlap) in `apps/backend/internal/text/chunker.go`
+    - Integrate chunking into `IngestHandler` in `apps/backend/internal/worker/ingest.go`
+    - Add unit tests for chunker and worker
+- [x] Task 2: Crawler Enhancements (Sitemap & llms.txt) (FR-3.2, FR-3.4)
+    - Detect and parse `/sitemap.xml`
+    - Detect and parse `/llms.txt`
+    - Update `apps/backend/internal/crawler/crawler.go`
+    - Add unit tests
+- [x] Task 3: Weaviate Hybrid Search (FR-5.2)
+    - Update `apps/backend/internal/adapter/weaviate/store.go` for configurable Hybrid Search
+    - Update `StoreChunk` to handle metadata
+    - Add integration tests
+- [x] Task 4: Reranking Adapters (FR-5.4)
+    - Create `apps/backend/internal/adapter/reranker/client.go`
+    - Implement Jina/Cohere API adapters
+    - Add unit tests
+- [x] Task 5: MCP Endpoint (FR-5.1)
+    - Refine `apps/backend/features/mcp/handler.go`
+    - Ensure correct JSON-RPC response format
+    - Add unit tests

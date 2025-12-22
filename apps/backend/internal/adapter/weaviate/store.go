@@ -23,17 +23,22 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 			"content":    chunk.Content,
 			"url":        chunk.SourceURL,
 			"sourceId":   chunk.SourceURL,
+			"chunkIndex": chunk.ChunkIndex,
 		}).
 		WithVector(chunk.Vector).
 		Do(ctx)
 	return err
 }
 
-func (s *Store) Search(ctx context.Context, vector []float32) ([]string, error) {
-	nearVector := s.client.GraphQL().NearVectorArgBuilder().WithVector(vector)
+func (s *Store) Search(ctx context.Context, query string, vector []float32, alpha float32) ([]string, error) {
+	hybrid := s.client.GraphQL().HybridArgumentBuilder().
+		WithQuery(query).
+		WithVector(vector).
+		WithAlpha(alpha)
+
 	res, err := s.client.GraphQL().Get().
 		WithClassName("DocumentChunk").
-		WithNearVector(nearVector).
+		WithHybrid(hybrid).
 		WithLimit(5).
 		WithFields(graphql.Field{Name: "content"}).
 		Do(ctx)
@@ -46,7 +51,6 @@ func (s *Store) Search(ctx context.Context, vector []float32) ([]string, error) 
 	}
 
 	var results []string
-	// Safely parse the result (simplified)
 	if data, ok := res.Data["Get"].(map[string]interface{}); ok {
 		if chunks, ok := data["DocumentChunk"].([]interface{}); ok {
 			for _, c := range chunks {

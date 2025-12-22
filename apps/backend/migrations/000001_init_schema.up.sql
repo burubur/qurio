@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    url TEXT NOT NULL UNIQUE,
+    url TEXT NOT NULL,
+    content_hash TEXT UNIQUE,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

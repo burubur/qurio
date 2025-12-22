@@ -1,18 +1,20 @@
 # Project Overview
 
-**Status:** MVP Implementation Complete (2025-12-21)
+**Status:** MVP Part 2 Planning (2025-12-22)
 
-## Components
-1.  **Backend (Go):** Fully implemented with clean architecture.
-    - Features: Source Management, MCP Endpoint, Ingestion Worker.
-    - Infrastructure: Postgres (Metadata), Weaviate (Vectors), NSQ (Messaging).
-    - Adapters: Gemini (Embeddings), Docling (OCR), Weaviate (Store).
-2.  **Frontend (Vue 3):**
-    - Features: Source List, Add Source Form.
-    - Tech: Vite, TypeScript, Vitest.
-3.  **Services:**
-    - Docling: Python FastAPI service for OCR.
+## Recent Progress
+-   **MVP Part 1 (Refinement) Completed:**
+    -   Chunking, Crawler (Sitemap/llms.txt), Hybrid Search, Reranking Adapters, MCP Endpoint.
+    -   Verified via tests (2025-12-22).
+    -   Docs synced (`todos.md` updated).
 
-## Verification
-- CI/CD: All unit tests passed (Backend + Frontend + Docling).
-- Infrastructure: Docker Compose ready.
+## Upcoming Features (Planned - MVP Part 2)
+1.  **Backend:**
+    -   Dynamic Settings (DB + API) for Reranker config.
+    -   Source Management (Dedupe via SHA-256, Soft Delete, Re-sync).
+2.  **Frontend:**
+    -   Settings Page (Reranker Config).
+    -   Source Actions (Re-sync, Delete buttons).
+
+## Active Plan
+-   `docs/plans/2025-12-22-qurio-mvp-part2-1.md` (Ready for execution)

@@ -12,6 +12,7 @@ import (
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/adapter/docling"
 	"qurio/apps/backend/internal/adapter/gemini"
+	"qurio/apps/backend/internal/adapter/reranker"
 	wstore "qurio/apps/backend/internal/adapter/weaviate"
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/retrieval"
@@ -95,11 +96,7 @@ func main() {
 		log.Printf("Failed to ensure weaviate schema, retrying in 2s... (%d/10) Error: %v", i+1, err)
 		time.Sleep(2 * time.Second)
 	}
-	// Note: If it fails after retries, the server will continue but vector ops might fail.
-	// Or we can Fatalf if strictly required. For now, let's keep going or fail?
-	// The original code Fatalf'd. Let's replicate that behavior check after loop if needed, 
-	// but EnsureSchema is idempotent.
-	// Actually, checking if it succeeded is better.
+
 	if err := vector.EnsureSchema(context.Background(), wAdapter); err != nil {
 		log.Fatalf("Failed to ensure weaviate schema after retries: %v", err)
 	}
@@ -113,6 +110,15 @@ func main() {
 	nsqProducer, err := nsq.NewProducer(cfg.NSQDHost, nsqCfg)
 	if err != nil {
 		log.Fatalf("Failed to create NSQ producer: %v", err)
+	}
+
+	// Reranker Adapter
+	var rerankerClient retrieval.Reranker
+	if cfg.RerankAPIKey != "" {
+		rerankerClient = reranker.NewClient(cfg.RerankProvider, cfg.RerankAPIKey)
+		log.Printf("Reranker enabled: %s", cfg.RerankProvider)
+	} else {
+		log.Println("Reranker disabled (no API key)")
 	}
 
 	// Embedder (Optional on startup, but needed for worker/retrieval)
@@ -143,19 +149,23 @@ func main() {
 
 		if r.Method == "POST" {
 			sourceHandler.Create(w, r)
+		} else if r.Method == "GET" {
+			sourceHandler.List(w, r)
 		}
 	})
 
 	// Feature: Retrieval & MCP
 	if geminiEmbedder != nil {
-		retrievalService := retrieval.NewService(geminiEmbedder, vecStore)
+		// Pass reranker (can be nil)
+		retrievalService := retrieval.NewService(geminiEmbedder, vecStore, rerankerClient)
 		mcpHandler := mcp.NewHandler(retrievalService)
 		http.Handle("/mcp", mcpHandler)
 	}
 
 	// Worker (Ingest)
 	if geminiEmbedder != nil {
-		ingestHandler := worker.NewIngestHandler(doclingClient, geminiEmbedder, vecStore)
+		// Pass nsqProducer and sourceRepo
+		ingestHandler := worker.NewIngestHandler(doclingClient, geminiEmbedder, vecStore, nsqProducer, sourceRepo)
 		
 		nsqCfg := nsq.NewConfig()
 		consumer, err := nsq.NewConsumer("ingest", "channel", nsqCfg)

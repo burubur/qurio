@@ -1,58 +1,97 @@
 <script setup lang="ts">
 import SourceForm from './features/sources/SourceForm.vue';
 import SourceList from './features/sources/SourceList.vue';
-import { ref } from 'vue';
-
-const sources = ref<{id: string, url: string}[]>([]);
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081';
-
-async function addSource(url: string) {
-  try {
-    const res = await fetch(`${API_URL}/sources`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url })
-    });
-    
-    if (!res.ok) throw new Error('Failed to add source');
-    
-    const data = await res.json();
-    sources.value.push(data);
-    alert('Source added and queued for ingestion!');
-  } catch (e) {
-    console.error(e);
-    alert('Error adding source');
-  }
-}
 </script>
 
 <template>
-  <div class="container">
-    <h1>Qurio Admin</h1>
-    <div class="section">
-      <h2>Add Source</h2>
-      <SourceForm @submit="addSource" />
-    </div>
-    
-    <div class="section">
-      <h2>Sources</h2>
-      <SourceList :sources="sources" />
-    </div>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo">Qurio</div>
+      <nav>
+        <!-- Future: Add nav links -->
+      </nav>
+    </header>
+
+    <main class="main-content">
+      <div class="card">
+        <h2>Add New Source</h2>
+        <p class="description">Enter a URL to ingest content into your knowledge base.</p>
+        <SourceForm />
+      </div>
+
+      <div class="card">
+        <h2>Your Sources</h2>
+        <SourceList />
+      </div>
+    </main>
   </div>
 </template>
 
+<style>
+/* Global Resets & Basics */
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: #f5f7fa;
+  color: #2c3e50;
+}
+
+* {
+  box-sizing: border-box;
+}
+</style>
+
 <style scoped>
-.container {
-  max-width: 800px;
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background-color: #fff;
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: flex;
+  align-items: center;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #3498db;
+  letter-spacing: -0.5px;
+}
+
+.main-content {
+  flex: 1;
+  max-width: 900px;
+  width: 100%;
   margin: 0 auto;
   padding: 2rem;
-  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
-.section {
-  margin-bottom: 2rem;
-  padding: 1rem;
-  border: 1px solid #ddd;
+
+.card {
+  background: white;
   border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+  border: 1px solid #eee;
 }
-h1 { color: #2c3e50; }
+
+h2 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.description {
+  color: #7f8c8d;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
 </style>

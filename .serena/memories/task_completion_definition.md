@@ -1,10 +1,8 @@
-# Task Completion Definition
+The user requested a Technical Implementation Plan for the Qurio MVP based on `docs/2025-12-21-qurio-mvp.md`.
+I have:
+1.  Analyzed the codebase and requirements.
+2.  Performed RAG searches for "Go web crawler", "Weaviate hybrid search", "Pinia setup", etc.
+3.  Generated a detailed plan at `docs/plans/2025-12-21-qurio-mvp-implementation.md`.
+4.  Updated `implementation_details` and `project_overview` memories.
 
-A task is considered complete when:
-1. **Code Changes:** All requested features or fixes are implemented according to the PRD specifications.
-2. **Verification:**
-    - The system builds and starts successfully (`docker-compose up` or individual service builds).
-    - Relevant tests pass (if available).
-    - Linter checks pass (`golangci-lint`, `eslint`, `ruff`/`flake8`).
-3. **Documentation:** Any new environment variables or configuration options are documented (e.g., in `.env.example`).
-4. **Cleanup:** Temporary files created during development are removed.
+The next step is for the developer (or Agent) to execute the plan starting with Task 1.

@@ -6,12 +6,14 @@ import (
 	"log"
 
 	"github.com/nsqio/go-nsq"
+	"qurio/apps/backend/internal/text"
 )
 
 type Chunk struct {
-	Content   string
-	Vector    []float32
-	SourceURL string
+	Content    string
+	Vector     []float32
+	SourceURL  string
+	ChunkIndex int
 }
 
 type Embedder interface {
@@ -26,22 +28,34 @@ type Fetcher interface {
 	Fetch(ctx context.Context, url string) (string, error)
 }
 
+type Producer interface {
+	Publish(topic string, body []byte) error
+}
+
+type SourceStatusUpdater interface {
+	UpdateStatus(ctx context.Context, id, status string) error
+}
+
 type IngestHandler struct {
 	fetcher  Fetcher
 	embedder Embedder
 	store    VectorStore
+	producer Producer
+	updater  SourceStatusUpdater
 }
 
-func NewIngestHandler(f Fetcher, e Embedder, s VectorStore) *IngestHandler {
-	return &IngestHandler{fetcher: f, embedder: e, store: s}
+func NewIngestHandler(f Fetcher, e Embedder, s VectorStore, p Producer, u SourceStatusUpdater) *IngestHandler {
+	return &IngestHandler{fetcher: f, embedder: e, store: s, producer: p, updater: u}
 }
 
 func (h *IngestHandler) HandleMessage(m *nsq.Message) error {
 	if len(m.Body) == 0 {
 		return nil
 	}
+
 	var payload struct {
 		URL string `json:"url"`
+		ID  string `json:"id"`
 	}
 	if err := json.Unmarshal(m.Body, &payload); err != nil {
 		log.Printf("Invalid message format: %v", err)
@@ -50,33 +64,68 @@ func (h *IngestHandler) HandleMessage(m *nsq.Message) error {
 
 	ctx := context.Background()
 
+	// 0. Retry Limit / DLQ
+	if m.Attempts > 3 {
+		log.Printf("Message %s exceeded max attempts (%d). Moving to DLQ.", m.ID, m.Attempts)
+		h.updater.UpdateStatus(ctx, payload.ID, "failed") // Mark as failed
+		if err := h.producer.Publish("ingestion_dlq", m.Body); err != nil {
+			log.Printf("Failed to publish to DLQ: %v", err)
+			return err // Retry publishing to DLQ
+		}
+		return nil // Ack original message
+	}
+
+	// Update status to processing
+	if payload.ID != "" {
+		_ = h.updater.UpdateStatus(ctx, payload.ID, "processing")
+	}
+
 	// 1. Fetch
 	content, err := h.fetcher.Fetch(ctx, payload.URL)
 	if err != nil {
-		log.Printf("Fetch failed: %v", err)
-		return err // Retry
+		log.Printf("Fetch failed for %s: %v", payload.URL, err)
+		// Don't mark failed yet, let NSQ retry
+		return err 
 	}
 
-	// 2. Chunk (Simplified: 1 chunk for now)
+	// 2. Chunk
+	chunks := text.Chunk(content, 512, 50)
+	if len(chunks) == 0 {
+		log.Printf("No chunks generated for %s", payload.URL)
+		_ = h.updater.UpdateStatus(ctx, payload.ID, "completed") // Or warning?
+		return nil
+	}
+
+	for i, c := range chunks {
+		// 3. Embed
+		vector, err := h.embedder.Embed(ctx, c)
+		if err != nil {
+			log.Printf("Embed failed: %v", err)
+			return err
+		}
+
+		// 4. Store
+		chunk := Chunk{
+			Content:    c,
+			Vector:     vector,
+			SourceURL:  payload.URL,
+			ChunkIndex: i,
+		}
+		if err := h.store.StoreChunk(ctx, chunk); err != nil {
+			log.Printf("Store failed: %v", err)
+			return err
+		}
+	}
+
+	log.Printf("Ingested %d chunks from: %s", len(chunks), payload.URL)
 	
-	// 3. Embed
-	vector, err := h.embedder.Embed(ctx, content)
-	if err != nil {
-		log.Printf("Embed failed: %v", err)
-		return err
+	// Success
+	if payload.ID != "" {
+		if err := h.updater.UpdateStatus(ctx, payload.ID, "completed"); err != nil {
+			log.Printf("Failed to update status: %v", err)
+			// Non-critical error, we still succeeded ingestion
+		}
 	}
-
-	// 4. Store
-	chunk := Chunk{
-		Content:   content,
-		Vector:    vector,
-		SourceURL: payload.URL,
-	}
-	if err := h.store.StoreChunk(ctx, chunk); err != nil {
-		log.Printf("Store failed: %v", err)
-		return err
-	}
-
-	log.Printf("Ingested: %s", payload.URL)
+	
 	return nil
 }

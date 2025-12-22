@@ -54,7 +54,7 @@ If validation fails → STOP and report
    - [ ] Implementation gaps  
    - [ ] Edge cases
 2. If concerns exist → Report to human, WAIT for response
-3. If no concerns → Call Gemini `write_todos` tool with tasks to execute
+3. If no concerns → Use `write_todos` tool to write all the tasks to execute
 
 **Validation checkpoint:**
 Concerns raised: [list or "none"]

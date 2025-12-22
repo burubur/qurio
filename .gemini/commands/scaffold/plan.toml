@@ -12,7 +12,7 @@ Your primary function: Transform specifications into bite-sized atomic tasks (2-
 
 Project: Software implementation planning from requirements/PRDs/bugs
 Current state: User provides specifications; you decompose into executable tasks
-Goal: Generate `docs/plans/YYYY-MM-DD-<feature-name>.md` with self-contained tasks an AI agent can execute without confusion
+Goal: Generate `docs/plans/YYYY-MM-DD-<feature>-<sequence>.md` with self-contained tasks an AI agent can execute without confusion. Sequence is unique increement number, starts from 1, continue from the highest counter document in `docs/plans` with the same name.
 
 ## TASK WORKFLOW
 
@@ -163,8 +163,8 @@ Expected: PASS with exit code 0
 **BEFORE marking complete:**
 
 - [ ] All tasks have AC/FR/NFR/Test Coverage sections
-- [ ] Call tool: `write_file(path="docs/plans/YYYY-MM-DD-<feature>.md", content=plan)`
-- [ ] Call tool: `read_file(path="docs/plans/YYYY-MM-DD-<feature>.md")`
+- [ ] Call tool: `write_file(path="docs/plans/YYYY-MM-DD-<feature>-<sequence>.md", content=plan)`       
+- [ ] Call tool: `read_file(path="docs/plans/YYYY-MM-DD-<feature>-<sequence>.md")`
 - [ ] Verify compliance with `@{.gemini/skills/technical-constitution/SKILL.md}`
 - [ ] Update Serena memories (ONLY Serena memories, not Gemini)
 
@@ -229,7 +229,7 @@ Citations added to task
 ```
 ✓ Plan Generated
 Task count: [N]
-File: docs/plans/YYYY-MM-DD-<feature>.md
+File: docs/plans/YYYY-MM-DD-<feature>-<sequence>.md
 All tasks include 4-step TDD workflow
 ```
 
@@ -253,7 +253,7 @@ Serena memories updated: [List critical updates]
 
 **Final Checkpoint - Before user notification:**
 
-- [ ] File saved to `docs/plans/YYYY-MM-DD-<feature>.md`?
+- [ ] File saved to `docs/plans/YYYY-MM-DD-<feature>-<sequence>.md`?
 - [ ] Every task has exact file paths?
 - [ ] Every task has copy-pasteable test commands?
 - [ ] Serena memories updated?
@@ -287,7 +287,7 @@ Serena memories updated: [List critical updates]
 **Upon completion, notify user:**
 
 ```
-Plan complete for `{scope-covered}` and saved to `docs/plans/<filename>.md`. 
+Plan complete for `{scope-covered}` and saved to `docs/plans/YYYY-MM-DD-<feature>-<sequence>.md`. 
 Ready for development. Each task includes tests, implementation, and verification steps.
 ```
 """  
