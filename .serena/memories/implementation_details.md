@@ -21,7 +21,10 @@
 -   **Framework:** Vue 3 + TypeScript + Vite.
 -   **State Management:** Pinia (`source.store.ts`, `settings.store.ts`).
 -   **Routing:** `vue-router` with history mode.
--   **Styling:** Custom CSS variables (Brand: Void Black, Cognitive Blue).
+-   **Design System:**
+    -   **Styling:** Tailwind CSS (Utility-first).
+    -   **Components:** shadcn-vue (Radix Vue based).
+    -   **Theme:** "Cyber-Librarian" (Void Black: `#0F172A`, Cognitive Blue: `#3B82F6`).
 -   **Layout:** `AppLayout` with fixed `Sidebar`.
 -   **Icons:** `lucide-vue-next`.
 
@@ -29,3 +32,11 @@
 -   **Pattern:** Feature-based (`features/source`), Internal-based (`internal/settings`, `internal/worker`).
 -   **Service/Repo:** Interface-based dependency injection.
 -   **Worker:** NSQ consumer for ingestion tasks.
+-   **Logging:** `log/slog` (Standardized across all modules).
+-   **Error Handling:**
+    -   **Format:** JSON Envelope (`{ error: { code, message }, correlationId }`).
+    -   **MCP:** Compliant with JSON-RPC 2.0 error codes.
+    -   **Health:** `/health` returns JSON `{"status": "ok"}`.
+-   **Resilience:**
+    -   **Timeouts:** Enforced on all external clients (e.g., Docling: 30s).
+    -   **DLQ:** Failed ingestion messages moved to `ingestion_dlq` after 3 attempts.

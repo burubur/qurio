@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"time"
 )
 
 type Client struct {
@@ -16,7 +17,9 @@ type Client struct {
 }
 
 func NewClient(baseURL string) *Client {
-	return &Client{baseURL: baseURL, client: &http.Client{}}
+	return &Client{baseURL: baseURL, client: &http.Client{
+		Timeout: 30 * time.Second,
+	}}
 }
 
 func (c *Client) Fetch(ctx context.Context, url string) (string, error) {

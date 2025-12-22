@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"qurio/apps/backend/features/mcp"
@@ -29,10 +30,15 @@ import (
 )
 
 func main() {
+	// Initialize structured logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
 	// 1. Load Config
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	// 2. Database Connection
@@ -41,7 +47,8 @@ func main() {
 	
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatalf("Failed to open db connection: %v", err)
+		slog.Error("failed to open db connection", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
@@ -50,31 +57,35 @@ func main() {
 		if err := db.Ping(); err == nil {
 			break
 		}
-		log.Printf("Failed to ping db, retrying in 2s... (%d/10)", i+1)
+		slog.Warn("failed to ping db, retrying...", "attempt", i+1, "max_attempts", 10)
 		time.Sleep(2 * time.Second)
 	}
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping db after retries: %v", err)
+		slog.Error("failed to ping db after retries", "error", err)
+		os.Exit(1)
 	}
 
 	// 3. Run Migrations
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
-		log.Fatalf("Failed to create migration driver: %v", err)
+		slog.Error("failed to create migration driver", "error", err)
+		os.Exit(1)
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
 		"file://migrations",
 		"postgres", driver)
 	if err != nil {
-		log.Fatalf("Failed to create migration instance: %v", err)
+		slog.Error("failed to create migration instance", "error", err)
+		os.Exit(1)
 	}
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatalf("Failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
-	log.Println("Migrations applied successfully")
+	slog.Info("migrations applied successfully")
 
 	// 4. Weaviate Connection & Schema
 	wCfg := weaviate.Config{
@@ -83,7 +94,8 @@ func main() {
 	}
 	wClient, err := weaviate.NewClient(wCfg)
 	if err != nil {
-		log.Fatalf("Failed to create weaviate client: %v", err)
+		slog.Error("failed to create weaviate client", "error", err)
+		os.Exit(1)
 	}
 
 	wAdapter := vector.NewWeaviateClientAdapter(wClient)
@@ -91,15 +103,16 @@ func main() {
 	// Retry Weaviate Schema Ensure
 	for i := 0; i < 10; i++ {
 		if err := vector.EnsureSchema(context.Background(), wAdapter); err == nil {
-			log.Println("Weaviate schema ensured")
+			slog.Info("weaviate schema ensured")
 			break
 		}
-		log.Printf("Failed to ensure weaviate schema, retrying in 2s... (%d/10) Error: %v", i+1, err)
+		slog.Warn("failed to ensure weaviate schema, retrying...", "attempt", i+1, "error", err)
 		time.Sleep(2 * time.Second)
 	}
 
 	if err := vector.EnsureSchema(context.Background(), wAdapter); err != nil {
-		log.Fatalf("Failed to ensure weaviate schema after retries: %v", err)
+		slog.Error("failed to ensure weaviate schema after retries", "error", err)
+		os.Exit(1)
 	}
 
 	// 5. Initialize Adapters & Services
@@ -110,7 +123,8 @@ func main() {
 	nsqCfg := nsq.NewConfig()
 	nsqProducer, err := nsq.NewProducer(cfg.NSQDHost, nsqCfg)
 	if err != nil {
-		log.Fatalf("Failed to create NSQ producer: %v", err)
+		slog.Error("failed to create NSQ producer", "error", err)
+		os.Exit(1)
 	}
 
 	// Feature: Source
@@ -162,27 +176,29 @@ func main() {
 	nsqCfg = nsq.NewConfig()
 	consumer, err := nsq.NewConsumer("ingest", "channel", nsqCfg)
 	if err != nil {
-		log.Printf("Failed to create NSQ consumer: %v", err)
+		slog.Error("failed to create NSQ consumer", "error", err)
 	} else {
 		consumer.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
 			return ingestHandler.HandleMessage(m)
 		}))
 		// Connect to Lookupd
 		if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
-			log.Printf("Failed to connect to NSQLookupd: %v", err)
+			slog.Error("failed to connect to NSQLookupd", "error", err)
 		} else {
-			log.Println("NSQ Consumer connected")
+			slog.Info("NSQ Consumer connected")
 		}
 	}
 
 	// 6. Start Server
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	log.Printf("Server starting on :8081")
+	slog.Info("server starting", "port", 8081)
 	if err := http.ListenAndServe(":8081", nil); err != nil {
-		log.Fatalf("Server failed: %v", err)
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 )
 
 type Source struct {
@@ -61,7 +61,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 	// 3. Publish to NSQ
 	payload, _ := json.Marshal(map[string]string{"url": src.URL, "id": src.ID})
 	if err := s.pub.Publish("ingest", payload); err != nil {
-		log.Printf("Failed to publish ingest event: %v", err)
+		slog.Error("failed to publish ingest event", "error", err)
 	}
 	
 	return nil
@@ -87,7 +87,7 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 		"resync": true,
 	})
 	if err := s.pub.Publish("ingest", payload); err != nil {
-		log.Printf("Failed to publish resync event: %v", err)
+		slog.Error("failed to publish resync event", "error", err)
 		return err
 	}
 	return nil

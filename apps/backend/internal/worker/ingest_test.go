@@ -42,6 +42,10 @@ func (m *MockUpdater) UpdateStatus(ctx context.Context, id, status string) error
 	args := m.Called(ctx, id, status)
 	return args.Error(0)
 }
+func (m *MockUpdater) UpdateBodyHash(ctx context.Context, id, hash string) error {
+	args := m.Called(ctx, id, hash)
+	return args.Error(0)
+}
 
 func createMessage(body []byte) *nsq.Message {
 	msg := nsq.NewMessage(nsq.MessageID{'1','2','3','4','5','6','7','8','9','0','1','2','3','4','5','6'}, body)
@@ -61,6 +65,7 @@ func TestHandleMessage_Success(t *testing.T) {
 
 	// Expect Status Update: Processing
 	u.On("UpdateStatus", mock.Anything, "123", "processing").Return(nil)
+	u.On("UpdateBodyHash", mock.Anything, "123", mock.Anything).Return(nil)
 	
 	f.On("Fetch", mock.Anything, "http://test.com").Return("content", nil)
 	e.On("Embed", mock.Anything, "content").Return([]float32{0.1, 0.2}, nil)
@@ -87,6 +92,7 @@ func TestHandleMessage_MultiChunk(t *testing.T) {
 	msg := createMessage(payload)
 
 	u.On("UpdateStatus", mock.Anything, "123", "processing").Return(nil)
+	u.On("UpdateBodyHash", mock.Anything, "123", mock.Anything).Return(nil)
 
 	contentBuilder := strings.Builder{}
 	for i := 0; i < 520; i++ {

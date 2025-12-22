@@ -17,7 +17,7 @@ func TestRerank_Mock(t *testing.T) {
 	reranked, err := c.Rerank(context.Background(), "query", docs)
 	
 	assert.NoError(t, err)
-	assert.Equal(t, docs, reranked)
+	assert.Equal(t, []int{0, 1}, reranked)
 }
 
 func TestRerank_Jina(t *testing.T) {
@@ -41,5 +41,5 @@ func TestRerank_Jina(t *testing.T) {
 	reranked, err := c.Rerank(context.Background(), "q", docs)
 	
 	assert.NoError(t, err)
-	assert.Equal(t, []string{"B", "A"}, reranked)
+	assert.Equal(t, []int{1, 0}, reranked)
 }

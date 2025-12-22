@@ -2,7 +2,12 @@
 
 **Core Services:**
 - **Orchestration/API:** Go 1.24+ (Standard Library `net/http`)
-- **Frontend:** Vue 3 + TypeScript + Vite + Pinia + Vue Router
+- **Frontend:**
+    - Vue 3 + TypeScript + Vite
+    - Pinia (State)
+    - Vue Router (Routing)
+    - **Tailwind CSS** (Styling)
+    - **shadcn-vue** (Component Library)
 - **Document Processing:** Python 3.10+ (Docling)
 - **Vector Database:** Weaviate OSS (v1.24+)
 - **Metadata Database:** PostgreSQL (v15+)
