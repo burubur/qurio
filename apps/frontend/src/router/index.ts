@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import SourcesView from '../views/SourcesView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import SourceDetailView from '../views/SourceDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -9,6 +10,11 @@ const router = createRouter({
       path: '/',
       name: 'sources',
       component: SourcesView
+    },
+    {
+      path: '/sources/:id',
+      name: 'source-detail',
+      component: SourceDetailView
     },
     {
       path: '/settings',

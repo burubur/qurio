@@ -17,6 +17,18 @@
     -   **Soft Delete:** Sets `deleted_at` timestamp. API filters these out.
     -   **Re-Sync:** Triggers ingestion event with existing ID. Note: Currently may duplicate vector chunks (known limitation).
 
+## Crawler Integration
+-   **Engine:** Custom recursive crawler (`internal/crawler`).
+-   **Configuration:**
+    -   `MaxDepth` (int): 0 = Single page, >0 = Recursive.
+    -   `Exclusions` ([]string): Regex patterns to skip URLs.
+    -   Stored in `sources` table (`max_depth`, `exclusions`).
+-   **Pipeline:**
+    -   **Discovery:** Checks `sitemap.xml` and `llms.txt`.
+    -   **Processing:** All pages processed via Docling (for layout preservation).
+    -   **Storage:** Chunks linked via `SourceID` (UUID) in Weaviate.
+    -   **Hashing:** Only root URL content hash is tracked in `sources` table.
+
 ## Frontend Architecture
 -   **Framework:** Vue 3 + TypeScript + Vite.
 -   **State Management:** Pinia (`source.store.ts`, `settings.store.ts`).

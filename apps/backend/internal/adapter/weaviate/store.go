@@ -6,6 +6,7 @@ import (
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/worker"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
+	"github.com/weaviate/weaviate-go-client/v5/weaviate/filters"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 )
 
@@ -23,7 +24,7 @@ func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {
 		WithProperties(map[string]interface{}{
 			"content":    chunk.Content,
 			"url":        chunk.SourceURL,
-			"sourceId":   chunk.SourceURL,
+			"sourceId":   chunk.SourceID,
 			"chunkIndex": chunk.ChunkIndex,
 		}).
 		WithVector(chunk.Vector).
@@ -106,4 +107,57 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 	}
 
 	return results, nil
+}
+
+func (s *Store) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) {
+	fields := []graphql.Field{
+		{Name: "content"},
+		{Name: "url"},
+		{Name: "sourceId"},
+		{Name: "chunkIndex"},
+	}
+
+	where := filters.Where().
+		WithOperator(filters.Equal).
+		WithPath([]string{"sourceId"}).
+		WithValueString(sourceID)
+
+	res, err := s.client.GraphQL().Get().
+		WithClassName("DocumentChunk").
+		WithWhere(where).
+		WithLimit(100).
+		WithFields(fields...).
+		Do(ctx)
+	
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Errors) > 0 {
+		return nil, fmt.Errorf("graphql error: %v", res.Errors)
+	}
+
+	var chunks []worker.Chunk
+	if data, ok := res.Data["Get"].(map[string]interface{}); ok {
+		if rawChunks, ok := data["DocumentChunk"].([]interface{}); ok {
+			for _, c := range rawChunks {
+				if props, ok := c.(map[string]interface{}); ok {
+					chunk := worker.Chunk{}
+					if content, ok := props["content"].(string); ok {
+						chunk.Content = content
+					}
+					if url, ok := props["url"].(string); ok {
+						chunk.SourceURL = url
+					}
+					if sID, ok := props["sourceId"].(string); ok {
+						chunk.SourceID = sID
+					}
+					if idx, ok := props["chunkIndex"].(float64); ok {
+						chunk.ChunkIndex = int(idx)
+					}
+					chunks = append(chunks, chunk)
+				}
+			}
+		}
+	}
+	return chunks, nil
 }

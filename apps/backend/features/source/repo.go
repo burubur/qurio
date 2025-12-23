@@ -3,6 +3,8 @@ package source
 import (
 	"context"
 	"database/sql"
+
+	"github.com/lib/pq"
 )
 
 type PostgresRepo struct {
@@ -15,7 +17,7 @@ func NewPostgresRepo(db *sql.DB) *PostgresRepo {
 
 func (r *PostgresRepo) ExistsByHash(ctx context.Context, hash string) (bool, error) {
 	var exists bool
-	query := `SELECT EXISTS(SELECT 1 FROM sources WHERE content_hash = $1)`
+	query := `SELECT EXISTS(SELECT 1 FROM sources WHERE content_hash = $1 AND deleted_at IS NULL)`
 	err := r.db.QueryRowContext(ctx, query, hash).Scan(&exists)
 	if err != nil {
 		return false, err
@@ -24,8 +26,8 @@ func (r *PostgresRepo) ExistsByHash(ctx context.Context, hash string) (bool, err
 }
 
 func (r *PostgresRepo) Save(ctx context.Context, src *Source) error {
-	query := `INSERT INTO sources (url, content_hash) VALUES ($1, $2) RETURNING id`
-	return r.db.QueryRowContext(ctx, query, src.URL, src.ContentHash).Scan(&src.ID)
+	query := `INSERT INTO sources (url, content_hash, max_depth, exclusions) VALUES ($1, $2, $3, $4) RETURNING id`
+	return r.db.QueryRowContext(ctx, query, src.URL, src.ContentHash, src.MaxDepth, pq.Array(src.Exclusions)).Scan(&src.ID)
 }
 
 func (r *PostgresRepo) UpdateStatus(ctx context.Context, id, status string) error {
@@ -35,7 +37,7 @@ func (r *PostgresRepo) UpdateStatus(ctx context.Context, id, status string) erro
 }
 
 func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
-	query := `SELECT id, url, status FROM sources WHERE deleted_at IS NULL ORDER BY created_at DESC`
+	query := `SELECT id, url, status, max_depth, exclusions FROM sources WHERE deleted_at IS NULL ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -45,7 +47,7 @@ func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
 	var sources []Source
 	for rows.Next() {
 		var s Source
-		if err := rows.Scan(&s.ID, &s.URL, &s.Status); err != nil {
+		if err := rows.Scan(&s.ID, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions)); err != nil {
 			return nil, err
 		}
 		sources = append(sources, s)
@@ -55,8 +57,8 @@ func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
 
 func (r *PostgresRepo) Get(ctx context.Context, id string) (*Source, error) {
 	s := &Source{}
-	query := `SELECT id, url, status FROM sources WHERE id = $1 AND deleted_at IS NULL`
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&s.ID, &s.URL, &s.Status)
+	query := `SELECT id, url, status, max_depth, exclusions FROM sources WHERE id = $1 AND deleted_at IS NULL`
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&s.ID, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions))
 	if err != nil {
 		return nil, err
 	}

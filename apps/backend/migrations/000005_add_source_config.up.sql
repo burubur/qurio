@@ -1,0 +1,2 @@
+ALTER TABLE sources ADD COLUMN max_depth INTEGER DEFAULT 0;
+ALTER TABLE sources ADD COLUMN exclusions TEXT[] DEFAULT '{}';

@@ -17,6 +17,7 @@ import (
 	"qurio/apps/backend/internal/adapter/reranker"
 	wstore "qurio/apps/backend/internal/adapter/weaviate"
 	"qurio/apps/backend/internal/config"
+	"qurio/apps/backend/internal/crawler"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/vector"
 	"qurio/apps/backend/internal/settings"
@@ -157,7 +158,7 @@ func main() {
 
 	// Feature: Source
 	sourceRepo := source.NewPostgresRepo(db)
-	sourceService := source.NewService(sourceRepo, nsqProducer)
+	sourceService := source.NewService(sourceRepo, nsqProducer, vecStore)
 	sourceHandler := source.NewHandler(sourceService)
 
 	// Feature: Settings
@@ -187,6 +188,7 @@ func main() {
 	// Routes
 	http.HandleFunc("POST /sources", enableCORS(sourceHandler.Create))
 	http.HandleFunc("GET /sources", enableCORS(sourceHandler.List))
+	http.HandleFunc("GET /sources/{id}", enableCORS(sourceHandler.Get))
 	http.HandleFunc("DELETE /sources/{id}", enableCORS(sourceHandler.Delete))
 	http.HandleFunc("POST /sources/{id}/resync", enableCORS(sourceHandler.ReSync))
 
@@ -209,7 +211,10 @@ func main() {
 	http.HandleFunc("POST /mcp/messages", enableCORS(mcpHandler.HandleMessage))
 
 	// Worker (Ingest)
-	ingestHandler := worker.NewIngestHandler(doclingClient, geminiEmbedder, vecStore, nsqProducer, sourceRepo)
+	crawlerFactory := func(cfg crawler.Config) (worker.Crawler, error) {
+		return crawler.New(cfg)
+	}
+	ingestHandler := worker.NewIngestHandler(crawlerFactory, doclingClient, geminiEmbedder, vecStore, nsqProducer, sourceRepo)
 	
 	nsqCfg = nsq.NewConfig()
 	consumer, err := nsq.NewConsumer("ingest", "channel", nsqCfg)

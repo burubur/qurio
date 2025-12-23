@@ -7,15 +7,18 @@ export interface Source {
   url?: string
   status?: string
   lastSyncedAt?: string
+  max_depth?: number
+  exclusions?: string[]
 }
 
 export const useSourceStore = defineStore('sources', () => {
   const sources = ref<Source[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  let pollingInterval: any = null
 
-  async function fetchSources() {
-    isLoading.value = true
+  async function fetchSources(background = false) {
+    if (!background) isLoading.value = true
     error.value = null
     try {
       const res = await fetch('/api/sources')
@@ -27,7 +30,26 @@ export const useSourceStore = defineStore('sources', () => {
       error.value = e.message || 'Unknown error'
       console.error('Failed to fetch sources', e)
     } finally {
-      isLoading.value = false
+      if (!background) isLoading.value = false
+    }
+  }
+
+  function startPolling() {
+    if (pollingInterval) return
+    pollingInterval = setInterval(() => {
+      const hasActiveSources = sources.value.some(s => 
+        s.status === 'processing' || s.status === 'pending'
+      )
+      if (hasActiveSources) {
+        fetchSources(true)
+      }
+    }, 2000)
+  }
+
+  function stopPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+      pollingInterval = null
     }
   }
 
@@ -82,6 +104,21 @@ export const useSourceStore = defineStore('sources', () => {
     }
   }
 
+  async function getSource(id: string) {
+    isLoading.value = true
+    error.value = null
+    try {
+      const res = await fetch(`/api/sources/${id}`)
+      if (!res.ok) throw new Error(`Failed to fetch source details: ${res.statusText}`)
+      return await res.json()
+    } catch (e: any) {
+      error.value = e.message || 'Unknown error'
+      return null
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return { 
     sources, 
     isLoading, 
@@ -89,6 +126,9 @@ export const useSourceStore = defineStore('sources', () => {
     fetchSources, 
     addSource,
     deleteSource,
-    resyncSource
+    resyncSource,
+    getSource,
+    startPolling,
+    stopPolling
   }
 })

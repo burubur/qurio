@@ -2,6 +2,7 @@ package source_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"crypto/sha256"
@@ -138,4 +139,41 @@ func TestReSyncSource(t *testing.T) {
 	err := svc.ReSync(context.Background(), id)
 	assert.NoError(t, err)
 	repo.AssertExpectations(t)
+}
+
+func TestCreateSource_WithConfig(t *testing.T) {
+	repo := new(MockRepo)
+	pub := new(MockPublisher)
+	svc := source.NewService(repo, pub)
+	
+	src := &source.Source{
+		URL:        "https://example.com",
+		MaxDepth:   2,
+		Exclusions: []string{"/admin", "/login"},
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(src.URL)))
+
+	repo.On("ExistsByHash", mock.Anything, hash).Return(false, nil)
+	repo.On("Save", mock.Anything, mock.Anything).Return(nil)
+	
+	pub.On("Publish", "ingest", mock.MatchedBy(func(body []byte) bool {
+		var p map[string]interface{}
+		json.Unmarshal(body, &p)
+		
+		maxDepth, ok := p["max_depth"].(float64)
+		if !ok || maxDepth != 2 {
+			return false
+		}
+		
+		exclusions, ok := p["exclusions"].([]interface{})
+		if !ok || len(exclusions) != 2 {
+			return false
+		}
+		
+		return p["url"] == src.URL
+	})).Return(nil)
+	
+	err := svc.Create(context.Background(), src)
+	assert.NoError(t, err)
+	pub.AssertExpectations(t)
 }

@@ -6,7 +6,8 @@ Base URL: `/api` (Proxied via Nginx to Backend :8081)
 | Method | Endpoint | Description | Payload/Params |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/sources` | List all active sources | - |
-| `POST` | `/sources` | Create new source | `{"url": "string"}` |
+| `GET` | `/sources/{id}` | Get source details & chunks | - |
+| `POST` | `/sources` | Create new source | `{"url": "...", "max_depth": 0, "exclusions": []}` |
 | `DELETE` | `/sources/{id}` | Soft delete source | - |
 | `POST` | `/sources/{id}/resync` | Trigger re-ingestion | - |
 
@@ -26,4 +27,4 @@ Base URL: `/api` (Proxied via Nginx to Backend :8081)
 ## Health
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/health` | Service health check |
+| `GET` | `/health` | Service health check | - |

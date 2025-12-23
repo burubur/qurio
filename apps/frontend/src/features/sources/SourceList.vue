@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useSourceStore } from './source.store'
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { RefreshCw, Trash2, ExternalLink } from 'lucide-vue-next'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import {
@@ -26,6 +26,11 @@ const handleResync = async (id: string) => {
 
 onMounted(() => {
   store.fetchSources()
+  store.startPolling()
+})
+
+onUnmounted(() => {
+  store.stopPolling()
 })
 </script>
 
@@ -57,6 +62,9 @@ onMounted(() => {
           <StatusBadge :status="source.status || 'pending'" />
         </CardContent>
         <CardFooter class="flex justify-end gap-2">
+           <Button variant="ghost" size="sm" @click="$router.push(`/sources/${source.id}`)" class="text-xs">
+              View Details
+           </Button>
            <Button variant="ghost" size="icon" @click="handleResync(source.id)" title="Re-sync">
               <RefreshCw :size="16" />
            </Button>
