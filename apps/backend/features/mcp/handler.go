@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 	"qurio/apps/backend/internal/retrieval"
+	"qurio/apps/backend/internal/middleware"
 	"github.com/google/uuid"
 )
 
