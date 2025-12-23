@@ -36,7 +36,7 @@
     - **UI:** Tabbed `SourceForm` for Web/File modes.
     - **UX:** `SourceList` and `SourceDetail` display filenames (without UUID prefix) and File Icon for file sources.
 
-## Reliability & Standardization (Part 3.7)
+## Reliability & Standardization (Part 3.7) - COMPLETED
 
 ### Backend (Go)
 - **Middleware:** Implemented `CorrelationID` middleware (`apps/backend/internal/middleware`) to ensure every request has a unique `X-Correlation-ID`.

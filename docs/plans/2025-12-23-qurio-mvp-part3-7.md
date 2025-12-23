@@ -1,8 +1,15 @@
 # Implementation Plan - MVP Part 3.7: Bug Fixes & Standardization
 
 **Ref:** `2025-12-23-bugs-inconsistencies.md`
-**Status:** Planned
+**Status:** Completed
 **Date:** 2025-12-23
+
+## Notes
+- **Middleware:** Implemented CorrelationID middleware with logging.
+- **API:** Standardized all JSON responses to `{ "data": ... }`.
+- **Reliability:** Enforced 60s timeouts in ResultConsumer.
+- **Worker:** Standardized handlers to return `list[dict]`.
+- **Frontend:** Implemented and used standardized `Textarea` component.
 
 ## 1. Scope
 Address critical technical debt, inconsistencies, and bugs identified in the project stability review. This covers API standardization, reliability (timeouts, tracing), and frontend/backend consistency.

@@ -13,6 +13,7 @@ const variant = computed(() => {
       return 'default'
     case 'processing':
     case 'pending':
+    case 'in_progress':
       return 'secondary'
     case 'failed':
       return 'destructive'

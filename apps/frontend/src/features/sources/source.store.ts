@@ -40,7 +40,7 @@ export const useSourceStore = defineStore('sources', () => {
     if (pollingInterval) return
     pollingInterval = setInterval(() => {
       const hasActiveSources = sources.value.some(s => 
-        s.status === 'processing' || s.status === 'pending'
+        s.status === 'processing' || s.status === 'pending' || s.status === 'in_progress'
       )
       if (hasActiveSources) {
         fetchSources(true)

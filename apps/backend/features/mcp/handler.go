@@ -286,8 +286,7 @@ func (h *Handler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 
 // HandleMessage accepts POST messages associated with a session
 func (h *Handler) HandleMessage(w http.ResponseWriter, r *http.Request) {
-	correlationID := uuid.New().String()
-	w.Header().Set("X-Correlation-ID", correlationID)
+	correlationID := middleware.GetCorrelationID(r.Context())
 	
 	slog.Info("mcp message received", 
 		"method", r.Method, 
