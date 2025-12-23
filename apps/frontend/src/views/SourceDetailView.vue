@@ -33,7 +33,9 @@ onMounted(async () => {
       </Button>
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Source Details</h1>
-        <p class="text-muted-foreground" v-if="source">{{ source.url }}</p>
+        <p class="text-muted-foreground" v-if="source">
+          {{ source.type === 'file' && source.url ? source.url.split('/').pop().split('_').slice(1).join('_') : source.url }}
+        </p>
       </div>
     </div>
 
@@ -93,9 +95,12 @@ onMounted(async () => {
                 <div class="flex justify-between items-start">
                    <div class="flex items-center gap-2">
                       <FileText class="h-3 w-3 text-muted-foreground" />
-                      <a :href="chunk.SourceURL" target="_blank" class="text-xs font-medium hover:underline text-primary truncate max-w-[300px]">
+                      <a v-if="source.type !== 'file'" :href="chunk.SourceURL" target="_blank" class="text-xs font-medium hover:underline text-primary truncate max-w-[300px]">
                          {{ chunk.SourceURL }}
                       </a>
+                      <span v-else class="text-xs font-medium text-muted-foreground truncate max-w-[300px]">
+                         {{ chunk.SourceURL.split('/').pop().split('_').slice(1).join('_') }}
+                      </span>
                    </div>
                    <Badge variant="outline" class="text-[10px] font-mono">Index: {{ chunk.ChunkIndex }}</Badge>
                 </div>

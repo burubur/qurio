@@ -191,15 +191,22 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 		apiKey = set.GeminiAPIKey
 	}
 
-	payload, _ := json.Marshal(map[string]interface{}{
+	payloadMap := map[string]interface{}{
 		"type":           src.Type,
-		"url":            src.URL,
 		"id":             src.ID,
 		"resync":         true,
-		"max_depth":      src.MaxDepth,
-		"exclusions":     src.Exclusions,
-		"gemini_api_key": apiKey,
-	})
+	}
+
+	if src.Type == "file" {
+		payloadMap["path"] = src.URL
+	} else {
+		payloadMap["url"] = src.URL
+		payloadMap["max_depth"] = src.MaxDepth
+		payloadMap["exclusions"] = src.Exclusions
+		payloadMap["gemini_api_key"] = apiKey
+	}
+
+	payload, _ := json.Marshal(payloadMap)
 	if err := s.pub.Publish("ingest.task", payload); err != nil {
 		slog.Error("failed to publish resync event", "error", err)
 		return err

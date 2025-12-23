@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useSourceStore } from './source.store'
 import { onMounted, onUnmounted } from 'vue'
-import { RefreshCw, Trash2, ExternalLink } from 'lucide-vue-next'
+import { RefreshCw, Trash2, ExternalLink, FileText } from 'lucide-vue-next'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import {
   Card,
@@ -49,11 +49,14 @@ onUnmounted(() => {
       <Card v-for="source in store.sources" :key="source.id" class="bg-card">
         <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle class="text-sm font-medium truncate pr-4 flex-1" :title="source.url">
-             {{ source.url }}
+             {{ source.type === 'file' && source.url ? source.url.split('/').pop().split('_').slice(1).join('_') : source.url }}
           </CardTitle>
-          <a :href="source.url" target="_blank" class="text-muted-foreground hover:text-primary transition-colors">
+          <a v-if="source.type !== 'file'" :href="source.url" target="_blank" class="text-muted-foreground hover:text-primary transition-colors">
              <ExternalLink :size="14" />
           </a>
+          <span v-else class="text-muted-foreground">
+             <FileText :size="14" />
+          </span>
         </CardHeader>
         <CardContent>
           <div class="text-xs text-muted-foreground font-mono mb-4">
