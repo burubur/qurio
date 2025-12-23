@@ -47,8 +47,9 @@ async function submit() {
       emit('submit')
     }
   } else {
-    if (!file.value) return
-    await store.uploadSource(file.value!)
+    const selectedFile = file.value
+    if (!selectedFile) return
+    await store.uploadSource(selectedFile)
     if (!store.error) {
       file.value = null
       emit('submit')
