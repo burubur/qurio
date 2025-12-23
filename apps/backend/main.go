@@ -12,12 +12,10 @@ import (
 
 	"qurio/apps/backend/features/mcp"
 	"qurio/apps/backend/features/source"
-	"qurio/apps/backend/internal/adapter/docling"
 	"qurio/apps/backend/internal/adapter/gemini"
 	"qurio/apps/backend/internal/adapter/reranker"
 	wstore "qurio/apps/backend/internal/adapter/weaviate"
 	"qurio/apps/backend/internal/config"
-	"qurio/apps/backend/internal/crawler"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/vector"
 	"qurio/apps/backend/internal/settings"
@@ -118,7 +116,6 @@ func main() {
 	}
 
 	// 5. Initialize Adapters & Services
-	doclingClient := docling.NewClient(cfg.DoclingURL)
 	vecStore := wstore.NewStore(wClient)
 
 	// NSQ Producer
@@ -134,24 +131,39 @@ func main() {
 	// We hit the nsqd http api to create it explicitly.
 	// cfg.NSQDHost is "nsqd:4150" (TCP), we need HTTP port 4151
 	// Assuming nsqd host is resolvable and port 4151 is standard
-	nsqHttpURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest", "nsqd")
+	nsqHttpURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.task", "nsqd")
+	nsqResultURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.result", "nsqd")
+	
 	// If NSQDHost contains port, strip it. Usually "host:port"
 	host, _, _ := net.SplitHostPort(cfg.NSQDHost)
 	if host != "" {
-		nsqHttpURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest", host)
+		nsqHttpURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.task", host)
+		nsqResultURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.result", host)
 	}
 	
 	// Fire and forget topic creation
 	go func() {
 		// Wait for nsqd to be ready
 		time.Sleep(2 * time.Second)
+		// Create ingest.task
 		resp, err := http.Post(nsqHttpURL, "application/json", nil)
 		if err != nil {
-			slog.Warn("failed to pre-create ingest topic", "error", err, "url", nsqHttpURL)
+			slog.Warn("failed to pre-create ingest.task topic", "error", err, "url", nsqHttpURL)
 		} else {
 			defer resp.Body.Close()
 			if resp.StatusCode == 200 {
-				slog.Info("ingest topic pre-created successfully")
+				slog.Info("ingest.task topic pre-created successfully")
+			}
+		}
+		
+		// Create ingest.result
+		resp2, err := http.Post(nsqResultURL, "application/json", nil)
+		if err != nil {
+			slog.Warn("failed to pre-create ingest.result topic", "error", err, "url", nsqResultURL)
+		} else {
+			defer resp2.Body.Close()
+			if resp2.StatusCode == 200 {
+				slog.Info("ingest.result topic pre-created successfully")
 			}
 		}
 	}()
@@ -210,25 +222,25 @@ func main() {
 	http.HandleFunc("GET /mcp/sse", enableCORS(mcpHandler.HandleSSE))
 	http.HandleFunc("POST /mcp/messages", enableCORS(mcpHandler.HandleMessage))
 
-	// Worker (Ingest)
-	crawlerFactory := func(cfg crawler.Config) (worker.Crawler, error) {
-		return crawler.New(cfg)
-	}
-	ingestHandler := worker.NewIngestHandler(crawlerFactory, doclingClient, geminiEmbedder, vecStore, nsqProducer, sourceRepo)
+	// Worker (Result Consumer)
+	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo)
 	
 	nsqCfg = nsq.NewConfig()
-	consumer, err := nsq.NewConsumer("ingest", "channel", nsqCfg)
+	// Consume 'ingest.result' topic, 'worker' channel (or 'backend' channel to be distinct from python worker channel if relevant)
+	// Python worker consumes 'ingest.task'.
+	// Go consumes 'ingest.result'.
+	consumer, err := nsq.NewConsumer("ingest.result", "backend", nsqCfg)
 	if err != nil {
-		slog.Error("failed to create NSQ consumer", "error", err)
+		slog.Error("failed to create NSQ consumer for results", "error", err)
 	} else {
 		consumer.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
-			return ingestHandler.HandleMessage(m)
+			return resultConsumer.HandleMessage(m)
 		}))
 		// Connect to Lookupd
 		if err := consumer.ConnectToNSQLookupd(cfg.NSQLookupd); err != nil {
 			slog.Error("failed to connect to NSQLookupd", "error", err)
 		} else {
-			slog.Info("NSQ Consumer connected")
+			slog.Info("NSQ Result Consumer connected")
 		}
 	}
 

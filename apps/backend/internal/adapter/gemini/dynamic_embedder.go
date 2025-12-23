@@ -36,7 +36,7 @@ func (e *DynamicEmbedder) Embed(ctx context.Context, text string) ([]float32, er
 		return nil, err
 	}
 
-	model := client.EmbeddingModel("embedding-001")
+	model := client.EmbeddingModel("gemini-embedding-001")
 	res, err := model.EmbedContent(ctx, genai.Text(text))
 	if err != nil {
 		return nil, err

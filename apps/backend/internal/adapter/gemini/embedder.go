@@ -16,7 +16,7 @@ func NewEmbedder(ctx context.Context, apiKey string) (*Embedder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Embedder{client: client, model: "embedding-001"}, nil
+	return &Embedder{client: client, model: "gemini-embedding-001"}, nil
 }
 
 func (e *Embedder) Embed(ctx context.Context, text string) ([]float32, error) {

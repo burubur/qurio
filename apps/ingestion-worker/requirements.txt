@@ -1,0 +1,10 @@
+pynsq==0.9.1
+crawl4ai
+docling
+python-snappy
+uvloop
+pydantic
+pydantic-settings
+pytest
+pytest-asyncio
+tornado

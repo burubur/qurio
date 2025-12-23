@@ -1,7 +1,6 @@
-version: '3.8'
 services:
   weaviate:
-    image: semitechnologies/weaviate:1.24.10
+    image: semitechnologies/weaviate:latest
     ports: ["8080:8080"]
     environment:
       QUERY_DEFAULTS_LIMIT: 25
@@ -17,7 +16,7 @@ services:
       start_period: 10s
   
   postgres:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     ports: ["5432:5432"]
     environment:
       POSTGRES_USER: qurio
@@ -30,14 +29,14 @@ services:
       retries: 5
 
   nsqlookupd:
-    image: nsqio/nsq
+    image: nsqio/nsq:v1.3.0
     command: /nsqlookupd
     ports:
       - "4160:4160"
       - "4161:4161"
   
   nsqd:
-    image: nsqio/nsq
+    image: nsqio/nsq:v1.3.0
     # Use wget instead of curl in the healthcheck as the image might not have curl
     # The image is nsqio/nsq based on Alpine, it usually has wget
     command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --broadcast-address=nsqd
@@ -51,14 +50,16 @@ services:
       timeout: 5s
       retries: 5
 
-  docling:
-    build: ./services/docling
-    ports: ["8000:8000"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+  ingestion-worker:
+    build: ./apps/ingestion-worker
+    depends_on:
+      nsqd:
+        condition: service_healthy
+    environment:
+      - NSQ_LOOKUPD_HTTP=nsqlookupd:4161
+      - NSQD_TCP_ADDRESS=nsqd:4150
+    volumes:
+      - /tmp/qurio-uploads:/tmp/qurio-uploads
   
   backend:
     build: ./apps/backend
@@ -76,6 +77,8 @@ services:
         condition: service_healthy
       nsqd:
         condition: service_healthy
+    volumes:
+      - /tmp/qurio-uploads:/tmp/qurio-uploads
 
   frontend:
     build: ./apps/frontend

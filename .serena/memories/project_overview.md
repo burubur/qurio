@@ -1,23 +1,13 @@
-# Project Overview
-
-Qurio is an open-source, localhost-only context operating system for AI agents. It ingests documentation (web, files) and exposes it via MCP.
-
-**Current Status:** MVP Implementation Phase.
-- **Completed:** 
+**Status:** MVP Refactoring Phase - Complete.
+- **Completed:**
     - Core Architecture (Go/Weaviate/Postgres/Vue)
-    - Source CRUD (URL-based with Depth/Exclusion config)
-    - Source Details View (Chunk visualization)
-    - Recursive Web Crawler (Custom Go implementation)
+    - Source CRUD
     - Settings Management
-    - Retrieval (MCP Endpoint, Hybrid Search)
-    - Frontend Polling & Error Handling
-- **In Progress:** 
-    - File Uploads Integration
+    - Retrieval (MCP)
+    - **Refactor:** Distributed Ingestion (Python/NSQ) implemented and stable.
+    - **Worker:** Python 3.14, pynsq/Tornado, Crawl4AI, Docling.
+- **In Progress:**
+    - Advanced Filtering.
 - **Next:**
-    - Query Observability (Logging)
-    - Advanced Filtering (Date, Author)
-
-**Critical Constraints:**
-- Localhost only (no auth)
-- Testability-First (Mock adapters)
-- Pure Go backend (mostly)
+    - Query Observability.
+    - User Auth (maybe).

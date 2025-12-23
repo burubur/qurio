@@ -69,13 +69,16 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 
 	// 3. Publish to NSQ
 	payload, _ := json.Marshal(map[string]interface{}{
+		"type":       "web",
 		"url":        src.URL,
 		"id":         src.ID,
-		"max_depth":  src.MaxDepth,
+		"depth":      src.MaxDepth,
 		"exclusions": src.Exclusions,
 	})
-	if err := s.pub.Publish("ingest", payload); err != nil {
-		slog.Error("failed to publish ingest event", "error", err)
+	if err := s.pub.Publish("ingest.task", payload); err != nil {
+		slog.Error("failed to publish ingest.task event", "error", err)
+	} else {
+		slog.Info("published ingest.task event", "url", src.URL, "id", src.ID)
 	}
 	
 	return nil
@@ -121,13 +124,14 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 	}
 
 	payload, _ := json.Marshal(map[string]interface{}{
+		"type":       "web",
 		"url":        src.URL,
 		"id":         src.ID,
 		"resync":     true,
-		"max_depth":  src.MaxDepth,
+		"depth":      src.MaxDepth,
 		"exclusions": src.Exclusions,
 	})
-	if err := s.pub.Publish("ingest", payload); err != nil {
+	if err := s.pub.Publish("ingest.task", payload); err != nil {
 		slog.Error("failed to publish resync event", "error", err)
 		return err
 	}

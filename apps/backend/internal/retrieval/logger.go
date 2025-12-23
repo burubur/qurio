@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -26,8 +27,11 @@ func NewQueryLogger(w io.Writer) *QueryLogger {
 
 func NewFileQueryLogger(path string) (*QueryLogger, error) {
 	// Ensure directory exists
-	// But path might be "data/logs/query.log", so dirname is "data/logs"
-	// For now assume caller handles it or just try open
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+	
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
