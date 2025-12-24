@@ -16,7 +16,7 @@ export const useSourceStore = defineStore('sources', () => {
   const sources = ref<Source[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
-  let pollingInterval: any = null
+  let pollingInterval: any = null // eslint-disable-line @typescript-eslint/no-explicit-any
 
   async function fetchSources(background = false) {
     if (!background) isLoading.value = true
@@ -28,7 +28,7 @@ export const useSourceStore = defineStore('sources', () => {
       }
       const json = await res.json()
       sources.value = json.data || []
-    } catch (e: any) {
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message || 'Unknown error'
       console.error('Failed to fetch sources', e)
     } finally {
@@ -71,7 +71,7 @@ export const useSourceStore = defineStore('sources', () => {
       }
       const json = await res.json()
       sources.value.push(json.data)
-    } catch (e: any) {
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message || 'Unknown error'
       console.error('Failed to add source', e)
     } finally {
@@ -86,7 +86,7 @@ export const useSourceStore = defineStore('sources', () => {
       const res = await fetch(`/api/sources/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Failed to delete source: ${res.statusText}`)
       sources.value = sources.value.filter(s => s.id !== id)
-    } catch (e: any) {
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message || 'Unknown error'
     } finally {
       isLoading.value = false
@@ -99,7 +99,7 @@ export const useSourceStore = defineStore('sources', () => {
     try {
       const res = await fetch(`/api/sources/${id}/resync`, { method: 'POST' })
       if (!res.ok) throw new Error(`Failed to resync source: ${res.statusText}`)
-    } catch (e: any) {
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message || 'Unknown error'
     } finally {
       isLoading.value = false
@@ -124,7 +124,7 @@ export const useSourceStore = defineStore('sources', () => {
       const json = await res.json()
       sources.value.push(json.data)
       return json.data
-    } catch (e: any) {
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message || 'Unknown error'
       console.error('Failed to upload source', e)
       throw e
@@ -141,7 +141,7 @@ export const useSourceStore = defineStore('sources', () => {
       if (!res.ok) throw new Error(`Failed to fetch source details: ${res.statusText}`)
       const json = await res.json()
       return json.data
-    } catch (e: any) {
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       error.value = e.message || 'Unknown error'
       return null
     } finally {

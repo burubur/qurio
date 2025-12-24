@@ -12,51 +12,85 @@ onMounted(() => {
 
 <template>
   <div class="settings-form">
-    <div v-if="store.error" class="msg error">{{ store.error }}</div>
-    <div v-if="store.successMessage" class="msg success">{{ store.successMessage }}</div>
+    <div
+      v-if="store.error"
+      class="msg error"
+    >
+      {{ store.error }}
+    </div>
+    <div
+      v-if="store.successMessage"
+      class="msg success"
+    >
+      {{ store.successMessage }}
+    </div>
 
     <div class="form-group">
       <label for="geminiKey">Gemini API Key</label>
       <input 
         id="geminiKey" 
-        type="password" 
         v-model="store.geminiApiKey" 
+        type="password" 
         class="input" 
         placeholder="Enter Gemini API Key"
-      />
-      <p class="hint">Required for generating embeddings (Google AI Studio).</p>
+      >
+      <p class="hint">
+        Required for generating embeddings (Google AI Studio).
+      </p>
     </div>
 
     <div class="form-group">
       <label for="provider">Rerank Provider</label>
       <div class="select-wrapper">
-        <select id="provider" v-model="store.rerankProvider" class="input">
-          <option value="none">None</option>
-          <option value="jina">Jina AI</option>
-          <option value="cohere">Cohere</option>
+        <select
+          id="provider"
+          v-model="store.rerankProvider"
+          class="input"
+        >
+          <option value="none">
+            None
+          </option>
+          <option value="jina">
+            Jina AI
+          </option>
+          <option value="cohere">
+            Cohere
+          </option>
         </select>
       </div>
-      <p class="hint">Select an external provider to re-rank search results for better accuracy.</p>
+      <p class="hint">
+        Select an external provider to re-rank search results for better accuracy.
+      </p>
     </div>
 
-    <div class="form-group" v-if="store.rerankProvider !== 'none'">
+    <div
+      v-if="store.rerankProvider !== 'none'"
+      class="form-group"
+    >
       <label for="apiKey">API Key</label>
       <input 
         id="apiKey" 
-        type="password" 
         v-model="store.rerankApiKey" 
+        type="password" 
         class="input" 
         placeholder="Enter API Key"
-      />
+      >
     </div>
 
     <button 
       class="btn-primary" 
-      @click="store.updateSettings" 
-      :disabled="store.isLoading"
+      :disabled="store.isLoading" 
+      @click="store.updateSettings"
     >
-      <Loader2 v-if="store.isLoading" class="spin" :size="18" />
-      <Save v-else :size="18" />
+      <Loader2
+        v-if="store.isLoading"
+        class="spin"
+        :size="18"
+      />
+      <Save
+        v-else
+        :size="18"
+      />
       <span>{{ store.isLoading ? 'Saving...' : 'Save Configuration' }}</span>
     </button>
   </div>

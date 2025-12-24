@@ -17,20 +17,34 @@ const isActive = (path: string) => route.path === path
     </div>
 
     <nav class="nav">
-      <RouterLink to="/" class="nav-item" :class="{ active: isActive('/') }">
-        <Database class="nav-icon" :size="20" />
+      <RouterLink
+        to="/"
+        class="nav-item"
+        :class="{ active: isActive('/') }"
+      >
+        <Database
+          class="nav-icon"
+          :size="20"
+        />
         <span>Sources</span>
       </RouterLink>
       
-      <RouterLink to="/settings" class="nav-item" :class="{ active: isActive('/settings') }">
-        <Settings class="nav-icon" :size="20" />
+      <RouterLink
+        to="/settings"
+        class="nav-item"
+        :class="{ active: isActive('/settings') }"
+      >
+        <Settings
+          class="nav-icon"
+          :size="20"
+        />
         <span>Settings</span>
       </RouterLink>
     </nav>
 
     <div class="footer">
       <div class="status">
-        <div class="status-dot"></div>
+        <div class="status-dot" />
         <span>System Online</span>
       </div>
       <span class="version">v0.2.0-MVP</span>

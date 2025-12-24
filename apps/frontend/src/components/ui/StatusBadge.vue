@@ -24,7 +24,10 @@ const variant = computed(() => {
 </script>
 
 <template>
-  <Badge :variant="variant" class="capitalize">
+  <Badge
+    :variant="variant"
+    class="capitalize"
+  >
     {{ status }}
   </Badge>
 </template>

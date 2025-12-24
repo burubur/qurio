@@ -6,7 +6,9 @@ import Settings from '../features/settings/Settings.vue'
   <div class="view-container">
     <div class="header">
       <h1>Settings</h1>
-      <p class="subtitle">Configure AI providers and system preferences.</p>
+      <p class="subtitle">
+        Configure AI providers and system preferences.
+      </p>
     </div>
 
     <div class="card">

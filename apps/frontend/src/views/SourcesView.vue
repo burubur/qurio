@@ -7,13 +7,17 @@ import SourceList from '../features/sources/SourceList.vue'
   <div class="view-container">
     <div class="header">
       <h1>Sources</h1>
-      <p class="subtitle">Manage ingestion targets for your knowledge base.</p>
+      <p class="subtitle">
+        Manage ingestion targets for your knowledge base.
+      </p>
     </div>
 
     <div class="grid">
       <div class="card">
         <h2>Add Source</h2>
-        <p class="card-desc">Enter a URL to ingest documentation.</p>
+        <p class="card-desc">
+          Enter a URL to ingest documentation.
+        </p>
         <SourceForm />
       </div>
 

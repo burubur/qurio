@@ -6,7 +6,7 @@ import { useSettingsStore } from './settings.store'
 
 describe('Settings.vue', () => {
   it('fetches settings on mount', () => {
-    const wrapper = mount(Settings, {
+    mount(Settings, {
       global: {
         plugins: [createTestingPinia({ createSpy: vi.fn })],
       },
