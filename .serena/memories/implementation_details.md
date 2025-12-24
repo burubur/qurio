@@ -51,3 +51,14 @@
 - **Components:** Added `Textarea` UI component matching `shadcn` styling.
 - **Forms:** Updated `SourceForm` to use the standardized `Textarea` for configuration.
 - **State Management:** Updated `source.store.ts` and `settings.store.ts` to unwrap the standardized API response envelope (`res.json().data`).
+- **Build Fixes:** Resolved persistent TypeScript errors in `SourceForm.vue` using explicit casting and updated `eslint.config.mjs` to use `vue-eslint-parser` properly.
+
+## E2E Testing Standardization (Part 3.8) - COMPLETED
+- **Structure:** Dedicated `apps/e2e` project using Playwright.
+- **Configuration:** Configured to test against local Docker environment (`http://localhost:3000`).
+- **Coverage:** Automated test suite (`ingestion.spec.ts`) covers:
+    - Markdown file upload and verification.
+    - PDF file upload and verification (using `pdf-lib` generation).
+- **Execution:**
+    - **Standard:** Run via `cd apps/e2e && npm test`.
+    - **Agent Mode:** Supports interactive execution via MCP `browser_run_code` (verified with `browser_file_upload` simulation).

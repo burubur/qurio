@@ -1,4 +1,4 @@
-**Status:** MVP Refactoring Phase - Technical Compliance & Stabilization Complete.
+**Status:** MVP Refactoring Phase - Document Ingestion & Reliability Complete.
 - **Completed:**
     - Core Architecture (Go/Weaviate/Postgres/Vue)
     - Source CRUD & Settings
@@ -6,9 +6,12 @@
     - Distributed Ingestion (Basic)
     - **Backend & Worker Crawler Integration** (Recursive/Exclusions, Dynamic Config, Gemini 3)
     - **Part 3.5: Technical Compliance** (Logging/Errors/Timeouts)
-    - **Stabilization:** Recursive crawling fixes, Status lifecycle improvements, Docker config cleanup.
+    - **Part 3.6: Document Upload & OCR Integration** (PDF/Markdown support via Docling)
+    - **Part 3.7: Reliability & Standardization** (Correlation IDs, API Envelopes, Worker Timeouts)
+    - **E2E Testing Infrastructure:** Playwright setup in `apps/e2e` with Docker integration.
+    - **Stabilization:** Frontend build fixes (TS/ESLint), Backend imports, Status polling.
 - **In Progress:**
-    - **Part 3.6: Document Upload & OCR Integration** (Planned).
+    - **Authentication:** User Auth (Auth0/OIDC) - *Next Priority*
 - **Next:**
-    - User Authentication (Auth0/OIDC).
     - Query Observability (Deep Dive).
+    - Advanced RAG (HyDE, Multi-Query).

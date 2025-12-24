@@ -2,4 +2,5 @@
 - **Frontend:** Vue 3 (Composition API), Vite, TailwindCSS, Pinia
 - **Ingestion Worker:** Python 3.12 (Async), Crawl4AI (v0.4.x+), Docling, Pynsq
 - **AI/LLM:** Google Gemini (Model: `gemini-3-flash-preview`)
+- **Testing:** Playwright (E2E/Integration), Go Test (Unit), Pytest (Worker Unit)
 - **Infrastructure:** Docker Compose
