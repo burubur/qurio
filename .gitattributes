@@ -1,0 +1,3 @@
+# Ignore Playwright reports from language statistics
+playwright-report/** linguist-vendored
+test-results/** linguist-vendored
