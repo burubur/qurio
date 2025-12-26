@@ -26,7 +26,7 @@ async def handle_file_task(file_path: str) -> list[dict]:
                 converter.convert,
                 file_path
             ),
-            timeout=60.0
+            timeout=300.0
         )
         
         content = result.document.export_to_markdown()

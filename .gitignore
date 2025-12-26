@@ -43,9 +43,6 @@ pnpm-debug.log*
 # Docker
 .docker/
 
-# Gemini/Serena specific
-.gemin
-
 # Playwright reports
 playwright-report/
 test-results/
