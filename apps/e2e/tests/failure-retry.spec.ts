@@ -28,7 +28,8 @@ test.describe('Ingestion Failure and Retry Flow', () => {
     for (let i = 0; i < 30; i++) { // Poll for 60 seconds max
       const jobsRes = await request.get('http://localhost:8081/jobs/failed');
       expect(jobsRes.ok()).toBeTruthy();
-      const jobs = await jobsRes.json();
+      const json = await jobsRes.json();
+      const jobs = json.data;
       failedJob = jobs.find((j: any) => j.source_id === sourceId);
       
       if (failedJob) break;
@@ -61,7 +62,8 @@ test.describe('Ingestion Failure and Retry Flow', () => {
     for (let i = 0; i < 30; i++) {
       const jobsRes = await request.get('http://localhost:8081/jobs/failed');
       expect(jobsRes.ok()).toBeTruthy();
-      const jobs = await jobsRes.json();
+      const json = await jobsRes.json();
+      const jobs = json.data;
       failedJobRetry = jobs.find((j: any) => j.source_id === sourceId);
       
       if (failedJobRetry) {

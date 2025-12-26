@@ -3,7 +3,10 @@ package stats
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+
+	"qurio/apps/backend/internal/middleware"
 )
 
 type SourceRepo interface {
@@ -36,22 +39,28 @@ type StatsResponse struct {
 
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	correlationID := middleware.GetCorrelationID(ctx)
+
+	slog.InfoContext(ctx, "getting stats", "correlationId", correlationID)
 	
 	sCount, err := h.sourceRepo.Count(ctx)
 	if err != nil {
-		http.Error(w, "failed to count sources", http.StatusInternalServerError)
+		slog.ErrorContext(ctx, "failed to count sources", "error", err, "correlationId", correlationID)
+		h.writeError(ctx, w, "INTERNAL_ERROR", "failed to count sources", http.StatusInternalServerError)
 		return
 	}
 
 	jCount, err := h.jobRepo.Count(ctx)
 	if err != nil {
-		http.Error(w, "failed to count jobs", http.StatusInternalServerError)
+		slog.ErrorContext(ctx, "failed to count jobs", "error", err, "correlationId", correlationID)
+		h.writeError(ctx, w, "INTERNAL_ERROR", "failed to count jobs", http.StatusInternalServerError)
 		return
 	}
 
 	dCount, err := h.vectorStore.CountChunks(ctx)
 	if err != nil {
-		http.Error(w, "failed to count documents", http.StatusInternalServerError)
+		slog.ErrorContext(ctx, "failed to count documents", "error", err, "correlationId", correlationID)
+		h.writeError(ctx, w, "INTERNAL_ERROR", "failed to count documents", http.StatusInternalServerError)
 		return
 	}
 
@@ -62,5 +71,20 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"data": resp})
+}
+
+func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, code, message string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	resp := map[string]interface{}{
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+		"correlationId": middleware.GetCorrelationID(ctx),
+	}
+
 	json.NewEncoder(w).Encode(resp)
 }

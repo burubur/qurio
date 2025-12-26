@@ -62,6 +62,10 @@ func (m *MockRepo) SoftDelete(ctx context.Context, id string) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
+func (m *MockRepo) Count(ctx context.Context) (int, error) {
+	args := m.Called(ctx)
+	return args.Int(0), args.Error(1)
+}
 
 type MockPub struct {
 	mock.Mock
@@ -79,6 +83,11 @@ type MockChunkStore struct {
 func (m *MockChunkStore) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) {
 	args := m.Called(ctx, sourceID)
 	return args.Get(0).([]worker.Chunk), args.Error(1)
+}
+
+func (m *MockChunkStore) DeleteChunksBySourceID(ctx context.Context, sourceID string) error {
+	args := m.Called(ctx, sourceID)
+	return args.Error(0)
 }
 
 func TestCreate_FullPayload(t *testing.T) {

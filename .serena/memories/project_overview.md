@@ -1,21 +1,24 @@
-# Project Overview
+# Project Status Update - MVP Complete
 
-Qurio is a self-hosted, open-source ingestion and retrieval engine designed to provide grounded context for AI agents.
+The Qurio MVP is now functionally complete.
 
-## Core Features
-- **Ingestion:** Supports web crawling (with Sitemap/llms.txt support) and file uploads (PDF/DOCX via Docling).
-- **Retrieval:** Hybrid search (Weaviate) with configurable Reranking (Jina/Cohere).
-- **Interface:** MCP Protocol for agents, Admin UI for management.
-- **Architecture:** Go Backend, Vue Frontend, Python Worker, PostgreSQL + Weaviate.
+**Key Achievements:**
+- **Infrastructure:** Docker Compose stack (Postgres, Weaviate, NSQ, Go Backend, Python Worker, Vue Frontend) verified.
+- **Core Features:**
+  - Web & File Ingestion (with deduplication).
+  - Hybrid Search (BM25 + Vector) with optional Reranking (Jina/Cohere).
+  - MCP Endpoint (JSON-RPC 2.0 & SSE).
+  - Admin Dashboard (Sources, Stats, Failed Jobs).
+- **Quality Assurance:**
+  - Backend integration tests passing.
+  - End-to-end (Playwright) tests passing.
+  - API standardized (JSON envelopes, correlation IDs).
+  - Structured logging (slog/structlog) implemented end-to-end.
+  - Resilience features (Timeouts, DLQ/Retry) verified.
 
-## Current Status
-- **Date:** 2025-12-26
-- **Completed:** 
-  - Deployment (Docker)
-  - Core Ingestion (Web/File) & Retrieval (MCP)
-  - Settings (Alpha/TopK)
-  - Bug Fixes & Standardization (Correlation IDs, API Envelopes)
-  - Part 4.2: Advanced Ingestion (Sitemap/llms.txt), Re-sync Integrity, Cohere Reranker.
-- **Next:** 
-  - Part 5.1: Admin Completeness (Dashboard, Failed Jobs/DLQ), Source Cleanup, Documentation. (Done)
-  - Final E2E Testing.
+**Latest Version:** v0.2.0-MVP (as per Sidebar)
+**Documentation:** Updated README.md with setup and usage instructions.
+
+**Ready for:**
+- Beta testing / User acceptance testing.
+- Deployment.

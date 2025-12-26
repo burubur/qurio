@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import json
 import nsq
 import uvloop

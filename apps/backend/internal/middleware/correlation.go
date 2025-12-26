@@ -38,3 +38,7 @@ func GetCorrelationID(ctx context.Context) string {
 	}
 	return "unknown"
 }
+
+func WithCorrelationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, CorrelationKey, id)
+}

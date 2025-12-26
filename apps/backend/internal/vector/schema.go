@@ -34,7 +34,7 @@ func EnsureSchema(ctx context.Context, client SchemaClient) error {
 			},
 			{
 				Name:     "sourceId",
-				DataType: []string{"text"}, // UUID as string
+				DataType: []string{"string"}, // UUID as string (exact match)
 			},
 			{
 				Name:     "chunkIndex",
@@ -46,7 +46,7 @@ func EnsureSchema(ctx context.Context, client SchemaClient) error {
 			},
 			{
 				Name:     "url",
-				DataType: []string{"text"},
+				DataType: []string{"string"}, // URL as string (exact match)
 			},
 		},
 	}

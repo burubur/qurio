@@ -9,6 +9,7 @@ import (
 
 	"qurio/apps/backend/internal/worker"
 	"qurio/apps/backend/internal/settings"
+	"qurio/apps/backend/internal/middleware"
 )
 
 type Source struct {
@@ -97,6 +98,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 		"max_depth":      src.MaxDepth,
 		"exclusions":     src.Exclusions,
 		"gemini_api_key": apiKey,
+		"correlation_id": middleware.GetCorrelationID(ctx),
 	})
 	if err := s.pub.Publish("ingest.task", payload); err != nil {
 		slog.Error("failed to publish ingest.task event", "error", err)
@@ -130,9 +132,10 @@ func (s *Service) Upload(ctx context.Context, path string, hash string) (*Source
 
 	// Publish to NSQ
 	payload, _ := json.Marshal(map[string]interface{}{
-		"type": "file",
-		"path": path,
-		"id":   src.ID,
+		"type":           "file",
+		"path":           path,
+		"id":             src.ID,
+		"correlation_id": middleware.GetCorrelationID(ctx),
 	})
 	if err := s.pub.Publish("ingest.task", payload); err != nil {
 		slog.Error("failed to publish ingest.task event (upload)", "error", err)
@@ -202,6 +205,7 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 		"type":           src.Type,
 		"id":             src.ID,
 		"resync":         true,
+		"correlation_id": middleware.GetCorrelationID(ctx),
 	}
 
 	if src.Type == "file" {

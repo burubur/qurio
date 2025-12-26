@@ -19,7 +19,7 @@ export const useStatsStore = defineStore('stats', () => {
       const res = await fetch('/api/stats')
       if (!res.ok) throw new Error(`Failed to fetch stats: ${res.statusText}`)
       const json = await res.json()
-      stats.value = json
+      stats.value = json.data
     } catch (e: any) {
       error.value = e.message || 'Unknown error'
     } finally {

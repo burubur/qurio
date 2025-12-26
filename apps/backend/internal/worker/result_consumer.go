@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nsqio/go-nsq"
 	"qurio/apps/backend/features/job"
+	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/text"
 )
 
@@ -31,29 +33,36 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	}
 
 	var payload struct {
-		SourceID string `json:"source_id"`
-		Content  string `json:"content"`
-		URL      string `json:"url"`
-		Status   string `json:"status,omitempty"` // "success" or "failed"
-		Error    string `json:"error,omitempty"`
+		SourceID      string `json:"source_id"`
+		Content       string `json:"content"`
+		URL           string `json:"url"`
+		Status        string `json:"status,omitempty"` // "success" or "failed"
+		Error         string `json:"error,omitempty"`
+		CorrelationID string `json:"correlation_id,omitempty"`
 	}
 	if err := json.Unmarshal(m.Body, &payload); err != nil {
 		slog.Error("invalid message format", "error", err)
 		return nil // Don't retry invalid messages
 	}
 
+	correlationID := payload.CorrelationID
+	if correlationID == "" {
+		correlationID = uuid.New().String()
+	}
+
 	ctx := context.Background()
+	ctx = middleware.WithCorrelationID(ctx, correlationID)
 	
 	if payload.Status == "failed" {
-		slog.Error("ingestion failed", "source_id", payload.SourceID, "error", payload.Error)
+		slog.ErrorContext(ctx, "ingestion failed", "source_id", payload.SourceID, "error", payload.Error, "correlationId", correlationID)
 		if err := h.updater.UpdateStatus(ctx, payload.SourceID, "failed"); err != nil {
-			slog.Warn("failed to update status to failed", "error", err)
+			slog.WarnContext(ctx, "failed to update status to failed", "error", err, "correlationId", correlationID)
 		}
 
 		// Save Failed Job
 		sType, sURL, err := h.sourceFetcher.GetSourceDetails(ctx, payload.SourceID)
 		if err != nil {
-			slog.Error("failed to fetch source details for failed job", "error", err)
+			slog.ErrorContext(ctx, "failed to fetch source details for failed job", "error", err, "correlationId", correlationID)
 		} else {
 			jobPayload := map[string]interface{}{
 				"type": sType,
@@ -74,19 +83,19 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 				Error:    payload.Error,
 			}
 			if err := h.jobRepo.Save(ctx, failedJob); err != nil {
-				slog.Error("failed to save failed job", "error", err)
+				slog.ErrorContext(ctx, "failed to save failed job", "error", err, "correlationId", correlationID)
 			}
 		}
 
 		return nil
 	}
 
-	slog.Info("received result", "source_id", payload.SourceID, "content_len", len(payload.Content))
+	slog.InfoContext(ctx, "received result", "source_id", payload.SourceID, "content_len", len(payload.Content), "correlationId", correlationID)
 
 	// 0. Delete Old Chunks (Idempotency)
 	if payload.URL != "" {
 		if err := h.store.DeleteChunksByURL(ctx, payload.SourceID, payload.URL); err != nil {
-			slog.Error("failed to delete old chunks", "error", err, "source_id", payload.SourceID, "url", payload.URL)
+			slog.ErrorContext(ctx, "failed to delete old chunks", "error", err, "source_id", payload.SourceID, "url", payload.URL, "correlationId", correlationID)
 			return err // Retry on error to ensure consistency
 		}
 	}
@@ -95,13 +104,13 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	hash := sha256.Sum256([]byte(payload.Content))
 	hashStr := fmt.Sprintf("%x", hash)
 	if err := h.updater.UpdateBodyHash(ctx, payload.SourceID, hashStr); err != nil {
-		slog.Warn("failed to update body hash", "error", err)
+		slog.WarnContext(ctx, "failed to update body hash", "error", err, "correlationId", correlationID)
 	}
 
 	// 2. Chunk
 	chunks := text.Chunk(payload.Content, 512, 50)
 	if len(chunks) == 0 {
-		slog.Warn("no chunks generated", "source_id", payload.SourceID)
+		slog.WarnContext(ctx, "no chunks generated", "source_id", payload.SourceID, "correlationId", correlationID)
 		_ = h.updater.UpdateStatus(ctx, payload.SourceID, "completed")
 		return nil
 	}
@@ -109,12 +118,15 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	// 3. Embed & Store
 	for i, c := range chunks {
 		err := func() error {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			// Pass correlation ID to child context (though Context already has it via Value)
+			// But creating new context with timeout might strip values if not careful?
+			// context.WithTimeout derives from parent, so values are preserved.
+			embedCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
 
-			vector, err := h.embedder.Embed(ctx, c)
+			vector, err := h.embedder.Embed(embedCtx, c)
 			if err != nil {
-				slog.Error("embed failed", "error", err)
+				slog.ErrorContext(ctx, "embed failed", "error", err, "correlationId", correlationID)
 				return err
 			}
 
@@ -126,8 +138,8 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 				ChunkIndex: i,
 			}
 
-			if err := h.store.StoreChunk(ctx, chunk); err != nil {
-				slog.Error("store failed", "error", err)
+			if err := h.store.StoreChunk(embedCtx, chunk); err != nil {
+				slog.ErrorContext(ctx, "store failed", "error", err, "correlationId", correlationID)
 				return err
 			}
 			return nil
@@ -137,11 +149,11 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		}
 	}
 
-	slog.Info("stored chunks", "count", len(chunks), "source_id", payload.SourceID)
+	slog.InfoContext(ctx, "stored chunks", "count", len(chunks), "source_id", payload.SourceID, "correlationId", correlationID)
 	
 	// 4. Update Status
 	if err := h.updater.UpdateStatus(ctx, payload.SourceID, "completed"); err != nil {
-		slog.Warn("failed to update status", "error", err)
+		slog.WarnContext(ctx, "failed to update status", "error", err, "correlationId", correlationID)
 	}
 
 	return nil
