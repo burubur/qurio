@@ -3,6 +3,7 @@ import json
 import nsq
 import uvloop
 import tornado.platform.asyncio
+from tornado.iostream import StreamClosedError
 import structlog
 from config import settings
 from handlers.web import handle_web_task
@@ -29,9 +30,17 @@ async def process_message(message):
     
     # Keep message alive
     stop_touch = asyncio.Event()
+    current_task = asyncio.current_task()
+
     async def touch_loop():
         while not stop_touch.is_set():
-            message.touch()
+            try:
+                message.touch()
+            except (nsq.Error, StreamClosedError, Exception) as e:
+                logger.warning("touch_failed_connection_lost", error=str(e))
+                if current_task:
+                    current_task.cancel()
+                return
             await asyncio.sleep(10) # Touch often to prevent timeout
             
     touch_task = asyncio.create_task(touch_loop())
@@ -68,11 +77,15 @@ async def process_message(message):
                     "depth": data.get('depth', 0)
                 }
                 
-                producer.pub(
-                    settings.nsq_topic_result,
-                    json.dumps(result_payload).encode('utf-8'),
-                    callback=lambda c, d: logger.info("result_published", source_id=source_id, url=res.get('url'))
-                )
+                try:
+                    producer.pub(
+                        settings.nsq_topic_result,
+                        json.dumps(result_payload).encode('utf-8'),
+                        callback=lambda c, d: logger.info("result_published", source_id=source_id, url=res.get('url'))
+                    )
+                except Exception as e:
+                    logger.error("pub_failed", source_id=source_id, error=str(e))
+
         elif producer:
             # Handle case where no results returned (e.g. all pages failed)
             fail_payload = {
@@ -82,14 +95,26 @@ async def process_message(message):
                 "url": data.get('url', ''),
                 "content": ""
             }
-            producer.pub(
-                settings.nsq_topic_result,
-                json.dumps(fail_payload).encode('utf-8'),
-                callback=lambda c, d: logger.info("failure_reported", source_id=source_id, reason="empty_results")
-            )
+            try:
+                producer.pub(
+                    settings.nsq_topic_result,
+                    json.dumps(fail_payload).encode('utf-8'),
+                    callback=lambda c, d: logger.info("failure_reported", source_id=source_id, reason="empty_results")
+                )
+            except Exception as e:
+                logger.error("pub_failed", source_id=source_id, error=str(e))
             
-        message.finish()
-        
+        try:
+            message.finish()
+        except Exception as e:
+            logger.warning("finish_failed", error=str(e))
+    
+    except asyncio.CancelledError:
+        logger.warning("processing_cancelled_due_to_connection_loss", source_id=source_id if 'source_id' in locals() else "unknown")
+        # Do not finish message if cancelled, let it requeue or expire? 
+        # If connection lost, we can't finish anyway.
+        return
+
     except Exception as e:
         logger.error("message_processing_failed", error=str(e))
         
@@ -100,16 +125,24 @@ async def process_message(message):
                 "status": "failed",
                 "error": str(e),
                 "url": data.get('url', ''),
-                "content": ""
+                "content": "",
+                "original_payload": data
             }
-            producer.pub(
-                settings.nsq_topic_result,
-                json.dumps(fail_payload).encode('utf-8'),
-                callback=lambda c, d: logger.info("failure_reported", source_id=source_id)
-            )
+            try:
+                producer.pub(
+                    settings.nsq_topic_result,
+                    json.dumps(fail_payload).encode('utf-8'),
+                    callback=lambda c, d: logger.info("failure_reported", source_id=source_id)
+                )
+            except Exception as ex:
+                logger.error("pub_failed_in_error_handler", error=str(ex))
         
         # Finish message so it doesn't loop forever
-        message.finish()
+        try:
+            message.finish()
+        except Exception as ex:
+            logger.warning("finish_failed_in_error_handler", error=str(ex))
+
     finally:
         stop_touch.set()
         await touch_task

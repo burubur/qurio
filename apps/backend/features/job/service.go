@@ -54,3 +54,7 @@ func (s *Service) Retry(ctx context.Context, id string) error {
 func (s *Service) Count(ctx context.Context) (int, error) {
 	return s.repo.Count(ctx)
 }
+
+func (s *Service) ResetStuckJobs(ctx context.Context) (int64, error) {
+	return 0, nil
+}

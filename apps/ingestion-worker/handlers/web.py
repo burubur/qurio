@@ -66,7 +66,8 @@ async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str =
         cache_mode=CacheMode.ENABLED,
         excluded_tags=['nav', 'footer', 'aside', 'header'],
         exclude_external_links=True,
-        markdown_generator=md_generator
+        markdown_generator=md_generator,
+        check_robots_txt=True 
     )
     
     # Initialize crawler

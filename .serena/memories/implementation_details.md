@@ -1,46 +1,41 @@
 # Implementation Details
 
-## Ingestion System (Distributed)
-The ingestion system uses a distributed page-level crawl architecture.
+## Backend Architecture (Go)
+The backend follows a **Feature-Based Architecture** (`apps/backend/features/`), grouping logic by domain rather than technical layer.
 
-### Components
-1. **Database**:
-   - `sources` table: Stores configuration (max_depth, exclusions).
-   - `source_pages` table: Tracks individual pages (URL, status, depth).
+### Core Features
+- **Source (`features/source`)**: Manages ingestion sources (Web/File).
+  - Uses `PostgresRepo` for metadata and state (`source_pages` table).
+  - Publishes tasks to NSQ (`ingest.task`).
+  - Handles page-level status tracking (Pending -> Processing -> Completed/Failed).
+- **Job (`features/job`)**: Manages failed ingestion tasks (DLQ).
+  - **Dead Letter Queue**: Failed worker tasks are saved to `failed_jobs` table via `JobRepository`.
+  - **Retry Mechanism**: `POST /jobs/{id}/retry` re-publishes the `original_payload` to NSQ.
+- **MCP (`features/mcp`)**: Implements Model Context Protocol.
+  - Supports both SSE (`/mcp/sse`) and JSON-RPC (`/mcp/messages`).
+  - Integrates with `retrieval` service for RAG.
 
-2. **Ingestion Worker (Python)**:
-   - Processes single pages.
-   - Extracts content (markdown) and internal links.
-   - Returns result to NSQ `ingest.result`.
-   - Uses `Crawl4AI` with `AsyncWebCrawler`.
+### Ingestion Worker (Python)
+The worker is a distributed consumer built with `pynsq`, `asyncio`, and `crawl4ai`.
 
-3. **Backend (Go)**:
-   - **Producer**: Creates `Source` and seed `SourcePage`. Publishes seed task to `ingest.task`.
-   - **Consumer**: Listens to `ingest.result`.
-     - Processes content (chunking, embedding, vector storage).
-     - **Link Discovery**: Filters new links, deduplicates against `source_pages`, creates new pages, and enqueues new tasks if `depth < max_depth`.
-     - **Concurrency**: Uses `AddConcurrentHandlers` (configured by `INGESTION_CONCURRENCY`).
+- **Reliability**:
+  - **Robust Touch Loop**: Runs in background to keep NSQ connection alive. Cancels main task if connection drops (`StreamClosedError`).
+  - **Robots.txt**: Enforced via `crawl4ai` config to ensure politeness.
+  - **Error Reporting**: Captures `original_payload` on failure and sends to `ingest.result` with `status: failed`.
+- **Handlers**:
+  - `web.py`: Uses `AsyncWebCrawler` (Chromium) + `LLMContentFilter` (Gemini Flash) for content extraction.
+  - `file.py`: Uses `docling` for local file conversion (PDF/Docx).
 
-### Flow
-1. User creates Source (Web).
-2. Backend saves Source, creates Seed Page (Depth 0), publishes Task.
-3. Worker picks up Task, crawls URL, extracts Links.
-4. Worker publishes Result (Content + Links).
-5. Backend Consumer processes Result.
-   - Stores Chunks.
-   - If `depth < max_depth`:
-     - Filters links (internal only, exclusions).
-     - Bulk inserts new `SourcePage` records (ignoring duplicates).
-     - Publishes new Tasks for new pages (Depth + 1).
-   - Updates Page Status to "completed".
-   - **Source Completion**: Checks if all pages are completed. If pending count is 0, marks Source as `completed`.
-6. Frontend polls `GET /sources/{id}/pages` to update the real-time progress bar and "Active Crawls" list.
+## Frontend Architecture (Vue 3)
+Built with Vite, Pinia, and TailwindCSS.
 
-### Special Handling
-- **llms.txt**: The worker explicitly parses markdown links (`[text](url)`) using regex to support non-HTML link discovery.
-- **ReSync**: Triggers a full reset by **deleting all existing source_pages** and re-creating the seed page to ensure a fresh crawl.
+- **Dashboard**: Displays real-time stats (Sources, Docs, Failed Jobs).
+- **Failed Jobs Manager**:
+  - View (`/jobs`): Lists failed tasks with error details and JSON payload inspection.
+  - Action: Manual retry trigger.
+- **Proxy**: Dev server proxies `/api` -> `localhost:8081`.
 
-## Search
-- **Hybrid Search**: Combines BM25 (Keyword) and Vector Similarity.
-- **Reranking**: Optional reranking step using Jina/Cohere.
-- **Dynamic Tuning**: Alpha parameter (0.0 - 1.0) controls weight between keyword and vector search.
+## Data Flow
+1. **Ingestion**: User -> Backend (Create Source) -> NSQ (`ingest.task`) -> Worker (Crawl) -> NSQ (`ingest.result`) -> Backend (ResultConsumer).
+2. **Failure**: Worker (Error) -> NSQ (`ingest.result` w/ Error) -> Backend -> `failed_jobs` table.
+3. **Retry**: User -> Backend (Retry Endpoint) -> NSQ (`ingest.task` w/ Original Payload).

@@ -62,14 +62,15 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 	}
 
 	var payload struct {
-		SourceID      string   `json:"source_id"`
-		Content       string   `json:"content"`
-		URL           string   `json:"url"`
-		Status        string   `json:"status,omitempty"` // "success" or "failed"
-		Error         string   `json:"error,omitempty"`
-		Links         []string `json:"links,omitempty"`
-		Depth         int      `json:"depth"`
-		CorrelationID string   `json:"correlation_id,omitempty"`
+		SourceID        string          `json:"source_id"`
+		Content         string          `json:"content"`
+		URL             string          `json:"url"`
+		Status          string          `json:"status,omitempty"` // "success" or "failed"
+		Error           string          `json:"error,omitempty"`
+		Links           []string        `json:"links,omitempty"`
+		Depth           int             `json:"depth"`
+		CorrelationID   string          `json:"correlation_id,omitempty"`
+		OriginalPayload json.RawMessage `json:"original_payload,omitempty"`
 	}
 	if err := json.Unmarshal(m.Body, &payload); err != nil {
 		slog.Error("invalid message format", "error", err)
@@ -83,11 +84,11 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	ctx := context.Background()
 	ctx = middleware.WithCorrelationID(ctx, correlationID)
-	
+
 	// Handle Failure
 	if payload.Status == "failed" {
 		slog.ErrorContext(ctx, "ingestion failed", "source_id", payload.SourceID, "url", payload.URL, "error", payload.Error)
-		
+
 		// Update Page Status
 		if payload.URL != "" {
 			_ = h.pageManager.UpdatePageStatus(ctx, payload.SourceID, payload.URL, "failed", payload.Error)
@@ -102,7 +103,22 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 			}
 		}
 
-		// Save Failed Job (optional, maybe redundant with source_pages error)
+		// Save Failed Job
+		if payload.OriginalPayload != nil {
+			failedJob := &job.Job{
+				SourceID: payload.SourceID,
+				Handler:  "ingestion-worker", // Identify where it failed
+				Payload:  payload.OriginalPayload,
+				Error:    payload.Error,
+			}
+			if err := h.jobRepo.Save(ctx, failedJob); err != nil {
+				slog.ErrorContext(ctx, "failed to save failed job", "error", err)
+				// Don't return error here, we don't want to retry the result processing loop
+			} else {
+				slog.InfoContext(ctx, "saved failed job for retry", "job_id", failedJob.ID)
+			}
+		}
+
 		return nil
 	}
 

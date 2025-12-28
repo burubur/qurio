@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/lib/pq"
 )
@@ -167,4 +168,18 @@ func (r *PostgresRepo) CountPendingPages(ctx context.Context, sourceID string) (
               WHERE source_id = $1 AND (status = 'pending' OR status = 'processing')`
 	err := r.db.QueryRowContext(ctx, query, sourceID).Scan(&count)
 	return count, err
+}
+
+func (r *PostgresRepo) ResetStuckPages(ctx context.Context, timeout time.Duration) (int64, error) {
+	query := `UPDATE source_pages 
+              SET status = 'pending', updated_at = NOW(), error = 'timeout_reset' 
+              WHERE status = 'processing' AND updated_at < $1`
+	
+	cutoff := time.Now().Add(-timeout)
+	
+	result, err := r.db.ExecContext(ctx, query, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
