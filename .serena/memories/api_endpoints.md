@@ -32,6 +32,7 @@ All error responses follow this envelope:
 | `POST` | `/sources/upload` | Upload document source | `multipart/form-data` (`file`: binary) |
 | `DELETE` | `/sources/{id}` | Soft delete source | - |
 | `POST` | `/sources/{id}/resync` | Trigger re-ingestion | - |
+| `GET` | `/sources/{id}/pages` | List pages in source | - |
 
 ## Settings
 | Method | Endpoint | Description | Payload/Params |

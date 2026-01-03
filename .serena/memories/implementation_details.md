@@ -5,7 +5,7 @@ The backend follows a **Feature-Based Architecture** (`apps/backend/features/`),
 
 ### Core Features
 - **Source (`features/source`)**: Manages ingestion sources (Web/File).
-  - Uses `PostgresRepo` for metadata and state (`source_pages` table).
+  - Uses `PostgresRepo` for metadata (including user-defined `Name`) and state (`source_pages` table).
   - Publishes tasks to NSQ (`ingest.task`).
   - Handles page-level status tracking (Pending -> Processing -> Completed/Failed).
 - **Job (`features/job`)**: Manages failed ingestion tasks (DLQ).
@@ -20,8 +20,8 @@ The backend follows a **Feature-Based Architecture** (`apps/backend/features/`),
     - `qurio_fetch_page`: Retrieves full page content by URL, preserving code blocks.
 
 - **Retrieval (`internal/retrieval`)**:
-  - **Chunker**: Markdown-aware state machine with hierarchical prose splitting (Headers->Paragraphs->Lines) and strict Code Block preservation (regex-based).
-  - **Store (Weaviate)**: Implements hybrid search with dynamic filter builder. Stores rich metadata (`Title`, `Type`, `Language`) and `Contextual Embeddings` (Title+URL+Type prepended to vector).
+  - **Chunker**: Markdown-aware state machine with hierarchical prose splitting (Headers->Paragraphs->Lines) and strict Code Block preservation (regex-based) and API endpoint detection.
+  - **Store (Weaviate)**: Implements hybrid search with dynamic filter builder. Stores rich metadata (`Title`, `Type`, `Language`) and `Contextual Embeddings` (Title+Source+Path+URL+Type prepended to vector).
   - **ResultConsumer**: Normalizes URLs (strips fragments) to prevent redundant crawls.
 
 ### Reliability & Maintenance
@@ -36,7 +36,7 @@ The worker is a distributed consumer built with `pynsq`, `asyncio`, and `crawl4a
   - **Discovery**: Excluded tags removed to allow Sidebar/Nav link discovery.
   - **Error Reporting**: Captures `original_payload` on failure.
 - **Handlers**:
-  - `web.py`: Uses `AsyncWebCrawler` (Chromium) + `LLMContentFilter` (Gemini Flash). Extracts page `title` via regex/metadata fallback.
+  - `web.py`: Uses `AsyncWebCrawler` (Chromium) + `LLMContentFilter` (Gemini Flash). Extracts page `title` via regex/metadata fallback and `path` (breadcrumbs) from URL.
   - `file.py`: Uses `docling` for local file conversion. Extracts title from filename.
 - **Pipeline**: Propagates `title` in NSQ payload to Backend.
 

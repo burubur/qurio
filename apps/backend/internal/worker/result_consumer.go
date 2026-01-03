@@ -65,6 +65,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		SourceID        string          `json:"source_id"`
 		Content         string          `json:"content"`
 		Title           string          `json:"title"`
+		Path            string          `json:"path"`
 		URL             string          `json:"url"`
 		Status          string          `json:"status,omitempty"` // "success" or "failed"
 		Error           string          `json:"error,omitempty"`
@@ -127,6 +128,12 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	// 0. Update Page Status to Processing (or skip, just update to completed at end)
 	
+	// Fetch Source Config & Name
+	maxDepth, exclusions, apiKey, sourceName, err := h.sourceFetcher.GetSourceConfig(ctx, payload.SourceID)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to fetch source config", "error", err)
+	}
+	
 	// 1. Delete Old Chunks (Idempotency)
 	if payload.URL != "" {
 		if err := h.store.DeleteChunksByURL(ctx, payload.SourceID, payload.URL); err != nil {
@@ -151,8 +158,8 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 					// Type: <Content Type>
 					// ---
 					// <Raw Chunk Content>
-					contextualString := fmt.Sprintf("Title: %s\nURL: %s\nType: %s\n---\n%s", 
-						payload.Title, payload.URL, string(c.Type), c.Content)
+					contextualString := fmt.Sprintf("Title: %s\nSource: %s\nPath: %s\nURL: %s\nType: %s\n---\n%s", 
+						payload.Title, sourceName, payload.Path, payload.URL, string(c.Type), c.Content)
 
 					vector, err := h.embedder.Embed(embedCtx, contextualString)
 					if err != nil {
@@ -188,10 +195,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 
 	// 4. Distributed Crawl: Link Discovery
 	if payload.URL != "" && len(payload.Links) > 0 {
-		maxDepth, exclusions, apiKey, err := h.sourceFetcher.GetSourceConfig(ctx, payload.SourceID)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch source config", "error", err)
-		} else if payload.Depth < maxDepth {
+		if payload.Depth < maxDepth {
 			var newPages []PageDTO
 			seen := make(map[string]bool)
 			

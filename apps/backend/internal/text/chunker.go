@@ -57,6 +57,8 @@ func ChunkMarkdown(text string, maxTokens, overlap int) []ChunkResult {
 			cType = ChunkTypeConfig
 		} else if lang == "bash" || lang == "sh" || lang == "shell" {
 			cType = ChunkTypeCmd
+		} else if lang == "http" || lang == "graphql" || lang == "openapi" || lang == "swagger" {
+			cType = ChunkTypeAPI
 		}
 
 		// Estimate tokens (approx 4 chars per token)
@@ -123,7 +125,7 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 		}
 		
 		if len(section) <= maxChars {
-			chunks = append(chunks, ChunkResult{Content: section, Type: ChunkTypeProse})
+			chunks = append(chunks, ChunkResult{Content: section, Type: detectChunkType(section)})
 			continue
 		}
 		
@@ -146,7 +148,7 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 			} else {
 				// Flush current chunk if not empty
 				if currentChunk.Len() > 0 {
-					chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: ChunkTypeProse})
+					chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: detectChunkType(currentChunk.String())})
 					currentChunk.Reset()
 				}
 				
@@ -162,7 +164,7 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 							currentChunk.WriteString(line)
 						} else {
 							if currentChunk.Len() > 0 {
-								chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: ChunkTypeProse})
+								chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: detectChunkType(currentChunk.String())})
 								currentChunk.Reset()
 							}
 							
@@ -176,7 +178,7 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 										}
 										currentChunk.WriteString(word)
 									} else {
-										chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: ChunkTypeProse})
+										chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: detectChunkType(currentChunk.String())})
 										currentChunk.Reset()
 										currentChunk.WriteString(word)
 									}
@@ -193,7 +195,7 @@ func chunkProse(text string, maxTokens, overlap int) []ChunkResult {
 		}
 		
 		if currentChunk.Len() > 0 {
-			chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: ChunkTypeProse})
+			chunks = append(chunks, ChunkResult{Content: currentChunk.String(), Type: detectChunkType(currentChunk.String())})
 		}
 	}
 	
@@ -238,4 +240,16 @@ func chunkCode(content, lang string, cType ChunkType, maxTokens int) []ChunkResu
 	}
 	
 	return chunks
+}
+
+func detectChunkType(content string) ChunkType {
+	lower := strings.ToLower(content)
+	if strings.Contains(lower, "swagger") || strings.Contains(lower, "openapi") {
+		return ChunkTypeAPI
+	}
+	// Heuristic: "Endpoint" and "Method" and "URL" usually means API doc
+	if strings.Contains(lower, "endpoint") && strings.Contains(lower, "method") && (strings.Contains(lower, "url") || strings.Contains(lower, "http")) {
+		return ChunkTypeAPI
+	}
+	return ChunkTypeProse
 }

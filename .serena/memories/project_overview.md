@@ -19,10 +19,11 @@ Monarch wraps task completion in strict, executable gates. It runs locally along
 *   **Components:** Single Go binary (API, MCP Server, State) located in `apps/backend`, PostgreSQL + pgvector, Docker SDK for orchestration.
 *   **Interface:** Vue.js + Shadcn Dashboard located in `apps/frontend`.
 
-## Current Status (2026-01-02)
+## Current Status (2026-01-03)
 *   Backend Core implemented (DB, Runner, API, Gates, Project).
 *   **Execution Engine:** Universal Docker Executor and Tool Output Parsers (Go Test, ESLint) implemented.
 *   **LLM Eval Engine:** Implemented with Gemini Pro integration, Snapshot/Diff analysis.
-*   **MCP Server:** Implemented with Planner (search/list) and Builder (claim/submit) tools using SSE transport.
+*   **MCP Server:** Implemented with SSE transport, `qurio_search` (hybrid+filter), and `qurio_fetch_page`.
+*   **Ingestion (Qurio):** Advanced pipeline with API detection, breadcrumb extraction, and contextual embeddings.
 *   Frontend pending.
 *   **Planning:** Epic 5 (LLM Eval Engine) implementation complete.

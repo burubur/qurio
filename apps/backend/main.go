@@ -307,10 +307,10 @@ func (a *sourceFetcherAdapter) GetSourceDetails(ctx context.Context, id string) 
 	return s.Type, s.URL, nil
 }
 
-func (a *sourceFetcherAdapter) GetSourceConfig(ctx context.Context, id string) (int, []string, string, error) {
+func (a *sourceFetcherAdapter) GetSourceConfig(ctx context.Context, id string) (int, []string, string, string, error) {
 	s, err := a.repo.Get(ctx, id)
 	if err != nil {
-		return 0, nil, "", err
+		return 0, nil, "", "", err
 	}
 	
 	set, err := a.settings.Get(ctx)
@@ -319,7 +319,7 @@ func (a *sourceFetcherAdapter) GetSourceConfig(ctx context.Context, id string) (
 		apiKey = set.GeminiAPIKey
 	}
 	
-	return s.MaxDepth, s.Exclusions, apiKey, nil
+	return s.MaxDepth, s.Exclusions, apiKey, s.Name, nil
 }
 
 // Adapter for PageManager

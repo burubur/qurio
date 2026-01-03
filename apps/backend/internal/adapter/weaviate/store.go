@@ -263,6 +263,7 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 		WithClassName("DocumentChunk").
 		WithWhere(where).
 		WithLimit(1000). // Fetch up to 1000 chunks for a page
+		WithSort(graphql.Sort{Path: []string{"chunkIndex"}, Order: graphql.Asc}).
 		WithFields(fields...).
 		Do(ctx)
 	

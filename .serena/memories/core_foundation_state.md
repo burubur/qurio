@@ -27,12 +27,13 @@
     - `SSEHandler`: Transport layer bridging HTTP to MCP (via `go-sdk`).
     - `Planner`: Tools for querying state (`list_projects`, `search_past_tasks`).
     - `Builder`: Tools for executing tasks (`claim_task`, `submit_attempt`) with Circuit Breaker.
+    - `Qurio`: Knowledge tools (`qurio_search`, `qurio_fetch_page`) for documentation retrieval.
 
 4.  **Utilities:**
     - `Crypto`: AES-GCM encryption for sensitive data.
     - `Settings`: Database-backed, encrypted settings store.
 
 5.  **Ingestion & Retrieval (Qurio):**
-    - **Chunking:** Markdown-aware hierarchical splitting (Headers -> Paragraphs -> Lines) with strict code block preservation.
-    - **Crawling:** URL normalization (fragment stripping) and dynamic sidebar link discovery.
-    - **Storage:** Weaviate schema with dynamic property migration (`Title`, `Type`, `Language`) and Contextual Embeddings.
+    - **Chunking:** Markdown-aware splitting with strict code block preservation and **API endpoint detection**.
+    - **Crawling:** URL normalization, dynamic sidebar link discovery, and **Breadcrumb (`path`) extraction**.
+    - **Storage:** Weaviate schema with dynamic properties. **Contextual Embeddings** enriched with `Source Name`, `Path`, `Title`, `Type`, and `URL`.

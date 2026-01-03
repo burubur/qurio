@@ -117,11 +117,17 @@ async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str =
                 if match:
                     title = match.group(1).strip()
             
-            logger.info("crawl_completed", url=url, links_found=len(internal_links), title=title)
+            # Extract path (breadcrumbs)
+            parsed_url = urlparse(result.url)
+            path_segments = [s for s in parsed_url.path.split('/') if s]
+            path_str = " > ".join(path_segments)
+
+            logger.info("crawl_completed", url=url, links_found=len(internal_links), title=title, path=path_str)
 
             return [{
                 "url": result.url,
                 "title": title,
+                "path": path_str,
                 "content": result.markdown,
                 "links": internal_links
             }]

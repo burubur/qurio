@@ -31,5 +31,5 @@ type SourceStatusUpdater interface {
 
 type SourceFetcher interface {
 	GetSourceDetails(ctx context.Context, id string) (string, string, error)
-	GetSourceConfig(ctx context.Context, id string) (int, []string, string, error)
+	GetSourceConfig(ctx context.Context, id string) (int, []string, string, string, error)
 }
