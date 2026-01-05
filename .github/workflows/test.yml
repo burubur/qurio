@@ -78,6 +78,7 @@ jobs:
 
       - name: Test Python
         run: |
+          PYTHONPATH=.
           pip install --no-cache-dir -r requirements.txt
           pytest --cov=./ --cov-report=xml:coverage-python.xml
         working-directory: ./apps/ingestion-worker
