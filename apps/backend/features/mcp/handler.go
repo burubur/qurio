@@ -133,7 +133,7 @@ func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONR
 				Tools: []Tool{
 					{
 						Name:        "qurio_search",
-						Description: `Search documentation and knowledge base.
+						Description: `Search & Exploration tool. Performs a hybrid search (Keyword + Vector). Use this for specific questions, finding code snippets, or exploring topics across known sources.
 
 ARGUMENT GUIDE:
 
@@ -150,7 +150,12 @@ ARGUMENT GUIDE:
 
 [Filters: Metadata Filtering]
 - type: Filter by content type (e.g., "code", "prose", "api", "config").
-- language: Filter by language (e.g., "go", "python", "json").`,
+- language: Filter by language (e.g., "go", "python", "json").
+
+USAGE EXAMPLES:
+- Specific: search(query="webhook signature", alpha=0.3)
+- Conceptual: search(query="how to handle errors", alpha=1.0)
+- Filtered: search(query="User struct", filters={"type": "code", "language": "go"})`,
 						InputSchema: map[string]interface{}{
 							"type": "object",
 							"properties": map[string]interface{}{
@@ -184,7 +189,10 @@ ARGUMENT GUIDE:
 					},
 					{
 						Name:        "qurio_list_sources",
-						Description: "List available documentation sources. Returns ID, Name, and Type for each source.",
+						Description: `Discovery tool. Lists all available documentation sets (sources) currently indexed. Use this at the start of a session to understand what documentation is available.
+
+USAGE EXAMPLE:
+qurio_list_sources()`,
 						InputSchema: map[string]interface{}{
 							"type":       "object",
 							"properties": map[string]interface{}{},
@@ -192,7 +200,10 @@ ARGUMENT GUIDE:
 					},
 					{
 						Name:        "qurio_list_pages",
-						Description: "List pages for a specific source.",
+						Description: `Navigation tool. Lists all individual pages/documents within a specific source. Use this to find the exact URL of a document when a search query is too broad or to browse the table of contents.
+
+USAGE EXAMPLE:
+qurio_list_pages(source_id="src_stripe_api")`,
 						InputSchema: map[string]interface{}{
 							"type": "object",
 							"properties": map[string]interface{}{
@@ -205,8 +216,11 @@ ARGUMENT GUIDE:
 						},
 					},
 					{
-						Name:        "qurio_fetch_page",
-						Description: `Retrieve all content chunks for a specific URL from the knowledge base. Useful for getting full context of a page found via search.`, 
+						Name:        "qurio_read_page",
+						Description: `Deep Reading / Full Context tool. Retrieves the *entire* content of a specific page or document by its URL. Use this when a search result snippet is truncated or insufficient, or when you need to read a full guide/tutorial. Crucial: Always prefer this over guessing content if the search result is incomplete.
+
+USAGE EXAMPLE:
+read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 						InputSchema: map[string]interface{}{
 							"type": "object",
 							"properties": map[string]interface{}{
@@ -282,12 +296,15 @@ ARGUMENT GUIDE:
 					if res.Title != "" {
 						textResult += fmt.Sprintf("Title: %s\n", res.Title)
 					}
-					// Extract Type and Language from Metadata if present
+					// Extract Type, Language, and SourceID from Metadata if present
 					if typeVal, ok := res.Metadata["type"].(string); ok && typeVal != "" {
 						textResult += fmt.Sprintf("Type: %s\n", typeVal)
 					}
 					if langVal, ok := res.Metadata["language"].(string); ok && langVal != "" {
 						textResult += fmt.Sprintf("Language: %s\n", langVal)
+					}
+					if sourceID, ok := res.Metadata["sourceId"].(string); ok && sourceID != "" {
+						textResult += fmt.Sprintf("SourceID: %s\n", sourceID)
 					}
 					
 					textResult += fmt.Sprintf("Content:\n%s\n", res.Content)
@@ -461,17 +478,17 @@ ARGUMENT GUIDE:
 			}
 		}
 
-		if params.Name == "qurio_fetch_page" {
+		if params.Name == "qurio_read_page" {
 			var args FetchPageArgs
 			if err := json.Unmarshal(params.Arguments, &args); err != nil {
-				slog.Warn("invalid fetch_page arguments", "error", err)
+				slog.Warn("invalid read_page arguments", "error", err)
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
 				return &resp
 			}
 
 			results, err := h.retriever.GetChunksByURL(ctx, args.URL)
 			if err != nil {
-				slog.Error("fetch_page failed", "error", err)
+				slog.Error("read_page failed", "error", err)
 				return &JSONRPCResponse{
 					JSONRPC: "2.0",
 					ID:      req.ID,
@@ -504,7 +521,7 @@ ARGUMENT GUIDE:
 				}
 			}
 
-			slog.Info("tool execution completed", "tool", "qurio_fetch_page", "chunk_count", len(results))
+			slog.Info("tool execution completed", "tool", "qurio_read_page", "chunk_count", len(results))
 
 			return &JSONRPCResponse{
 				JSONRPC: "2.0",

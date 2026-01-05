@@ -53,7 +53,7 @@ func TestToolsList_ReturnsQurioTools(t *testing.T) {
     }
     
     assert.True(t, toolNames["qurio_search"])
-    assert.True(t, toolNames["qurio_fetch_page"])
+    assert.True(t, toolNames["qurio_read_page"])
 }
 
 func TestHandleMessage_ContextPropagation(t *testing.T) {
@@ -111,7 +111,7 @@ func TestHandleMessage_ContextPropagation(t *testing.T) {
     mockRetriever.AssertExpectations(t)
 }
 
-func TestToolsCall_FetchPage(t *testing.T) {
+func TestToolsCall_ReadPage(t *testing.T) {
     mockRetriever := new(MockRetriever)
     handler := NewHandler(mockRetriever, new(MockSourceManager))
 
@@ -121,7 +121,7 @@ func TestToolsCall_FetchPage(t *testing.T) {
         {Content: "Chunk 2", Metadata: map[string]interface{}{"url": url}},
     }, nil)
 
-    reqBody := `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "qurio_fetch_page", "arguments": {"url": "http://example.com"}}, "id": 1}`
+    reqBody := `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "qurio_read_page", "arguments": {"url": "http://example.com"}}, "id": 1}`
     
     var req JSONRPCRequest
     json.Unmarshal([]byte(reqBody), &req)
