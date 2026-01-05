@@ -27,4 +27,4 @@
 ## Known Limitations
 - **Ingestion Worker Environment:** Local testing requires manual `pip install pebble`.
 - **Progress Reporting:** "Pending" state is a black box. No page-level progress. (Proposal created: `docs/2026-01-04-proposal-worker-realtime-progression.md`)
-- **Search API:** Metadata stored but not yet returned to frontend. (Proposal created: `docs/2026-01-04-proposal-search-metadata-returns.md`)
+- **Search API:** Metadata (Author, CreatedAt, PageCount, Type) is now returned in `SearchResult` struct and populated by Weaviate. Frontend integration pending.

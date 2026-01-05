@@ -296,15 +296,15 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					if res.Title != "" {
 						textResult += fmt.Sprintf("Title: %s\n", res.Title)
 					}
-					// Extract Type, Language, and SourceID from Metadata if present
-					if typeVal, ok := res.Metadata["type"].(string); ok && typeVal != "" {
-						textResult += fmt.Sprintf("Type: %s\n", typeVal)
+					// Extract Type, Language, and SourceID from explicit fields
+					if res.Type != "" {
+						textResult += fmt.Sprintf("Type: %s\n", res.Type)
 					}
-					if langVal, ok := res.Metadata["language"].(string); ok && langVal != "" {
-						textResult += fmt.Sprintf("Language: %s\n", langVal)
+					if res.Language != "" {
+						textResult += fmt.Sprintf("Language: %s\n", res.Language)
 					}
-					if sourceID, ok := res.Metadata["sourceId"].(string); ok && sourceID != "" {
-						textResult += fmt.Sprintf("SourceID: %s\n", sourceID)
+					if res.SourceID != "" {
+						textResult += fmt.Sprintf("SourceID: %s\n", res.SourceID)
 					}
 					
 					textResult += fmt.Sprintf("Content:\n%s\n", res.Content)
@@ -316,6 +316,8 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					// }
 					textResult += "\n---\n"
 				}
+				
+				textResult += "\nUse qurio_read_page(url=\"...\") to read the full content of any result.\n"
 			}
 
 			slog.Info("tool execution completed", "tool", "qurio_search", "result_count", len(results))
@@ -509,12 +511,8 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				}
 				textResult = fmt.Sprintf("Page: %s\nURL: %s\n\n", title, args.URL)
 				for _, res := range results {
-					// Check Type in Metadata since SearchResult doesn't have Type field (it's in Metadata)
-					typeVal, _ := res.Metadata["type"].(string)
-					langVal, _ := res.Metadata["language"].(string)
-					
-					if typeVal == "code" {
-						textResult += fmt.Sprintf("[Code Block: %s]\n%s\n\n", langVal, res.Content)
+					if res.Type == "code" {
+						textResult += fmt.Sprintf("[Code Block: %s]\n%s\n\n", res.Language, res.Content)
 					} else {
 						textResult += fmt.Sprintf("%s\n\n", res.Content)
 					}

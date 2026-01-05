@@ -103,6 +103,9 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 		{Name: "language"},
 		{Name: "title"},
 		{Name: "sourceName"},
+		{Name: "author"},
+		{Name: "createdAt"},
+		{Name: "pageCount"},
 		{Name: "_additional", Fields: []graphql.Field{{Name: "score"}}},
 	}
 
@@ -153,25 +156,42 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 						result.Content = content
 					}
 					if url, ok := props["url"].(string); ok {
+						result.URL = url
 						result.Metadata["url"] = url
 					}
 					if sourceId, ok := props["sourceId"].(string); ok {
+						result.SourceID = sourceId
 						result.Metadata["sourceId"] = sourceId
 					}
 					if chunkIndex, ok := props["chunkIndex"].(float64); ok {
 						result.Metadata["chunkIndex"] = int(chunkIndex)
 					}
 					if typeVal, ok := props["type"].(string); ok {
+						result.Type = typeVal
 						result.Metadata["type"] = typeVal
 					}
 					if langVal, ok := props["language"].(string); ok {
+						result.Language = langVal
 						result.Metadata["language"] = langVal
 					}
 					if titleVal, ok := props["title"].(string); ok {
+						result.Title = titleVal
 						result.Metadata["title"] = titleVal
 					}
 					if sourceName, ok := props["sourceName"].(string); ok {
 						result.Metadata["sourceName"] = sourceName
+					}
+					if author, ok := props["author"].(string); ok {
+						result.Author = author
+						result.Metadata["author"] = author
+					}
+					if createdAt, ok := props["createdAt"].(string); ok {
+						result.CreatedAt = createdAt
+						result.Metadata["createdAt"] = createdAt
+					}
+					if pageCount, ok := props["pageCount"].(float64); ok {
+						result.PageCount = int(pageCount)
+						result.Metadata["pageCount"] = int(pageCount)
 					}
 					
 					// Extract score
@@ -273,6 +293,9 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 		{Name: "language"},
 		{Name: "title"},
 		{Name: "sourceName"},
+		{Name: "author"},
+		{Name: "createdAt"},
+		{Name: "pageCount"},
 	}
 
 	where := filters.Where().
@@ -307,25 +330,42 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 						result.Content = content
 					}
 					if u, ok := props["url"].(string); ok {
+						result.URL = u
 						result.Metadata["url"] = u
 					}
 					if sourceId, ok := props["sourceId"].(string); ok {
+						result.SourceID = sourceId
 						result.Metadata["sourceId"] = sourceId
 					}
 					if chunkIndex, ok := props["chunkIndex"].(float64); ok {
 						result.Metadata["chunkIndex"] = int(chunkIndex)
 					}
 					if t, ok := props["type"].(string); ok {
+						result.Type = t
 						result.Metadata["type"] = t
 					}
 					if l, ok := props["language"].(string); ok {
+						result.Language = l
 						result.Metadata["language"] = l
 					}
 					if title, ok := props["title"].(string); ok {
+						result.Title = title
 						result.Metadata["title"] = title
 					}
 					if sourceName, ok := props["sourceName"].(string); ok {
 						result.Metadata["sourceName"] = sourceName
+					}
+					if author, ok := props["author"].(string); ok {
+						result.Author = author
+						result.Metadata["author"] = author
+					}
+					if createdAt, ok := props["createdAt"].(string); ok {
+						result.CreatedAt = createdAt
+						result.Metadata["createdAt"] = createdAt
+					}
+					if pageCount, ok := props["pageCount"].(float64); ok {
+						result.PageCount = int(pageCount)
+						result.Metadata["pageCount"] = int(pageCount)
 					}
 					results = append(results, result)
 				}

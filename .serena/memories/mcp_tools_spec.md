@@ -21,6 +21,7 @@ Qurio exposes its knowledge base via the Model Context Protocol (MCP).
 
 **Output:**
 - List of results with Title, Type, Language, SourceID, and Content.
+- Includes explicit instruction: "Use qurio_read_page(url=\"...\") to read the full content of any result."
 
 ### `qurio_list_sources`
 **Description:** Discovery tool. Lists all available documentation sets (sources) currently indexed.

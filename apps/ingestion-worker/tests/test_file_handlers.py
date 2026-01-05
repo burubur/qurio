@@ -55,9 +55,9 @@ async def test_metadata_extraction():
             
             result = await handle_file_task("/tmp/test.pdf")
             
-            assert result['metadata']['title'] == "Test Title"
-            assert result['metadata']['pages'] == 10
-            assert result['content'] == "# Content"
+            assert result[0]['metadata']['title'] == "Test Title"
+            assert result[0]['metadata']['pages'] == 10
+            assert result[0]['content'] == "# Content"
 
 @pytest.mark.asyncio
 async def test_timeout():
@@ -105,8 +105,34 @@ async def test_end_to_end_pdf_simulation():
             result = await handle_file_task("/var/lib/qurio/uploads/restful.pdf")
             
             # Verify structure matches backend expectations
-            assert "content" in result
-            assert "metadata" in result
-            assert result["metadata"]["title"] == "RESTful Web Services"
-            assert result["metadata"]["pages"] == 450
-            assert "Chapter 1" in result["content"]
+            assert len(result) == 1
+            item = result[0]
+            assert "content" in item
+            assert "metadata" in item
+            assert item["metadata"]["title"] == "RESTful Web Services"
+            assert item["metadata"]["pages"] == 450
+            assert "Chapter 1" in item["content"]
+
+@pytest.mark.asyncio
+async def test_handle_file_task_returns_list_structure():
+    """Test that handle_file_task returns a list with path field."""
+    simulated_worker_output = {
+        "content": "some content",
+        "metadata": {"title": "Test"}
+    }
+    
+    with patch.object(handlers.file, 'executor') as mock_executor:
+        mock_executor.schedule.return_value = MagicMock()
+        
+        with patch('handlers.file.asyncio.wrap_future') as mock_wrap:
+            mock_wrap.return_value = create_done_future(result=simulated_worker_output)
+            
+            result = await handle_file_task("/path/to/file.pdf")
+            
+            assert isinstance(result, list), "Expected result to be a list"
+            assert len(result) == 1
+            item = result[0]
+            assert item['path'] == "/path/to/file.pdf"
+            assert item['url'] == "/path/to/file.pdf"
+            assert item['title'] == "Test"
+            assert item['links'] == []

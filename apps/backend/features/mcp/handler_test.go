@@ -134,3 +134,24 @@ func TestToolsCall_ReadPage(t *testing.T) {
     assert.Contains(t, result.Content[0].Text, "Chunk 2")
     mockRetriever.AssertExpectations(t)
 }
+
+func TestQurioSearchInstruction(t *testing.T) {
+    mockRetriever := new(MockRetriever)
+    handler := NewHandler(mockRetriever, new(MockSourceManager))
+
+    query := "test query"
+    mockRetriever.On("Search", mock.Anything, query, mock.Anything).Return([]retrieval.SearchResult{
+        {Content: "Some content found", Score: 0.9, Title: "Test Doc", Metadata: map[string]interface{}{"type": "prose"}},
+    }, nil)
+
+    reqBody := `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "qurio_search", "arguments": {"query": "test query"}}, "id": 1}`
+    
+    var req JSONRPCRequest
+    json.Unmarshal([]byte(reqBody), &req)
+    
+    resp := handler.processRequest(context.Background(), req)
+    
+    assert.Nil(t, resp.Error)
+    result := resp.Result.(ToolResult)
+    assert.Contains(t, result.Content[0].Text, "Use qurio_read_page(url=\"...\") to read the full content of any result.")
+}

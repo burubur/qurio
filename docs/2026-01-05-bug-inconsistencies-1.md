@@ -1,0 +1,15 @@
+functional and structural misalignments persist in the ingestion worker and the MCP implementation.
+The following inconsistencies are still present in the codebase:
+1. Ingestion Handler Contract Mismatch
+There is a functional inconsistency in the communication contract between the individual handlers and the main processing loop in the Python worker.
+• Return Type Disparity: In apps/ingestion-worker/main.py, the orchestrator treats the outputs of the web and file handlers differently. The handle_web_task returns a list of results directly, whereas handle_file_task returns a single dictionary that must be manually wrapped into a list by the caller.
+• Metadata Source Inconsistency: The web.py handler is responsible for deriving its own path field (breadcrumbs). Conversely, the file.py handler does not provide a path field; instead, the orchestrator in main.py manually assigns the file_path to the path key for file-based tasks. This creates a fragile internal API that complicates the addition of future ingestion sources.
+2. MCP Tool Specification vs. Implementation
+There is a disparity between the required specification in the Product Requirements Document (PRD) and the actual implementation of the Model Context Protocol (MCP) server.
+• Output Formatting: Although "Contextual Embeddings" are successfully implemented in the backend, there is an inconsistency in the search result display. The PRD specifies that search results should guide the agent to use qurio_fetch_page (now renamed qurio_read_page) if results are truncated. While the tool renaming has occurred, the qurio_search tool does not consistently include the explicit "Pivot to qurio_read_page" instruction in its actual execution output text.
+1. Metadata Exposure Gaps
+While the system successfully extracts and stores rich metadata, there is an inconsistency in how this data is exposed to the end-user versus the AI agent.
+• Storage vs. Retrieval: The ingestion worker extracts author, created_at, and page_count, and the vector store schema correctly includes these as filterable properties. However, the retrieval.SearchResult struct and the corresponding API endpoints return these fields within a generic Metadata map rather than as top-level, standardized fields.
+• Impact: This results in "Opaque Results" where the frontend and AI agents can vectorized the data for search but cannot easily render high-fidelity citations (e.g., "Page 3 of 45") without custom parsing of the metadata map.
+1. Codebase Analogy
+The current state of the apps/ folder is like a shipping warehouse where the new sorting machines (Sources/Settings) are fully automated and use barcodes. However, the manifest system (Worker Contract) still requires different paperwork for domestic versus international packages. Furthermore, while the security catalog (Vector Schema) has been updated to track "Item Color" and "Owner," the customer receipt (Search API) only lists the item weight, forcing the customer to guess the rest.

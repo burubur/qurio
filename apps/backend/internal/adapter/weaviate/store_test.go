@@ -93,3 +93,57 @@ func TestStore_Search(t *testing.T) {
 	assert.Len(t, results, 1)
 	assert.Equal(t, "found content", results[0].Content)
 }
+
+func TestStore_Search_PopulatesMetadata(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/graphql" {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]interface{}{
+					"Get": map[string]interface{}{
+						"DocumentChunk": []map[string]interface{}{
+							{
+								"content":    "found content",
+								"url":        "http://example.com",
+								"author":     "Alice",
+								"createdAt":  "2023-01-01",
+								"pageCount":  10.0, // GraphQL returns float for numbers
+								"language":   "go",
+								"type":       "code",
+								"sourceId":   "src-123",
+								"_additional": map[string]interface{}{
+									"score": 0.9,
+								},
+							},
+						},
+					},
+				},
+			})
+			return
+		}
+		http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	cfg := weaviateclient.Config{
+		Host:   ts.Listener.Addr().String(),
+		Scheme: "http",
+	}
+	client, err := weaviateclient.NewClient(cfg)
+	assert.NoError(t, err)
+
+	store := adapter.NewStore(client)
+
+	results, err := store.Search(context.Background(), "query", []float32{0.1}, 0.5, 1, nil)
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	
+	// Assert top-level fields
+	assert.Equal(t, "Alice", results[0].Author)
+	assert.Equal(t, "2023-01-01", results[0].CreatedAt)
+	assert.Equal(t, 10, results[0].PageCount)
+	assert.Equal(t, "go", results[0].Language)
+	assert.Equal(t, "code", results[0].Type)
+	assert.Equal(t, "src-123", results[0].SourceID)
+	assert.Equal(t, "http://example.com", results[0].URL)
+}

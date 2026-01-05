@@ -171,7 +171,7 @@ CONCURRENCY_LIMIT = asyncio.Semaphore(8)
 # Increase timeout to 30 minutes to accommodate large PDF books with OCR
 TIMEOUT_SECONDS = 1800
 
-async def handle_file_task(file_path: str) -> dict:
+async def handle_file_task(file_path: str) -> list[dict]:
     """
     Converts a document to markdown using Docling.
     Executes in a Pebble ProcessPool to enforce hard timeouts and kill stuck processes.
@@ -193,7 +193,14 @@ async def handle_file_task(file_path: str) -> dict:
             if not result["content"].strip():
                  raise IngestionError(ERR_EMPTY, "File contains no text")
 
-            return result
+            return [{
+                "content": result['content'],
+                "metadata": result['metadata'],
+                "url": file_path,
+                "path": file_path,
+                "title": result['metadata'].get('title', ''),
+                "links": []
+            }]
 
         except (TimeoutError, pebble.ProcessExpired):
             logger.error("conversion_timeout_killed", path=file_path)

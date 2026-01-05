@@ -7,10 +7,17 @@ import (
 )
 
 type SearchResult struct {
-	Content  string                 `json:"content"`
-	Score    float32                `json:"score"`
-	Title    string                 `json:"title,omitempty"`
-	Metadata map[string]interface{} `json:"metadata"`
+	Content   string                 `json:"content"`
+	Score     float32                `json:"score"`
+	Title     string                 `json:"title,omitempty"`
+	URL       string                 `json:"url,omitempty"`       // New
+	SourceID  string                 `json:"sourceId,omitempty"`  // New
+	Author    string                 `json:"author,omitempty"`    // New
+	CreatedAt string                 `json:"createdAt,omitempty"` // New
+	PageCount int                    `json:"pageCount,omitempty"` // New
+	Language  string                 `json:"language,omitempty"`  // New
+	Type      string                 `json:"type,omitempty"`      // New
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 type SearchOptions struct {

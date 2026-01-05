@@ -22,11 +22,15 @@ async def test_process_message_success():
     
     # Mock handle_file_task
     with patch('main.handle_file_task', new_callable=AsyncMock) as mock_handle:
-        mock_handle.return_value = {
+        mock_handle.return_value = [{
             "content": "test content",
-            "metadata": {"title": "Test Doc"}
-        }
-        
+            "metadata": {"title": "Test Doc"},
+            "url": "/tmp/test.pdf",
+            "path": "/tmp/test.pdf",
+            "title": "Test Doc",
+            "links": []
+        }]
+    
         # Mock producer
         main.producer = MagicMock()
         main.producer.pub = MagicMock()
