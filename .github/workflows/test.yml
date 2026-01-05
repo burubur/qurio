@@ -20,7 +20,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
-      
+          
+      - name: Debug Go Version
+        run: |
+          go version
+          cat go.mod
+        working-directory: ./apps/backend
+        
       - name: Test Go
         run: go test -v -coverprofile=coverage-go.out ./...
         working-directory: ./apps/backend
