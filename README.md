@@ -11,6 +11,7 @@
 [![MCP](https://img.shields.io/badge/Protocol-MCP-orange)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/License-MIT-8A8B8C.svg)](LICENSE)
 
+[![codecov](https://codecov.io/gh/irahardianto/qurio/graph/badge.svg?token=NJRFD4H8UY)](https://codecov.io/gh/irahardianto/qurio)
 ![Semgrep](https://github.com/irahardianto/qurio/actions/workflows/semgrep.yml/badge.svg)
 [![CodeQL](https://github.com/irahardianto/qurio/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/irahardianto/qurio/actions/workflows/github-code-scanning/codeql)
 [![Dependabot](https://badgen.net/badge/Dependabot/enabled/green?icon=dependabot)](https://dependabot.com/)
