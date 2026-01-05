@@ -1,0 +1,31 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+      # specific configuration for each flag
+      backend:
+        target: auto
+        flags:
+          - backend
+      ingestion-worker:
+        target: auto
+        flags:
+          - ingestion-worker
+      frontend:
+        target: auto
+        flags:
+          - frontend
+
+# Define which folders belong to which flag
+flags:
+  backend:
+    paths:
+      - apps/backend/  # or wherever your go code lives
+  ingestion-worker:
+    paths:
+      - apps/ingestion-worker/  # or wherever your python code lives
+  frontend:
+    paths:
+      - apps/frontend/ # or wherever your typescript code lives
