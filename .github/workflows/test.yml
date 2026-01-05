@@ -56,6 +56,17 @@ jobs:
           fail_ci_if_error: true
           
       # --- PYTHON SECTION ---
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false  # Keep this false to preserve Python/Node/Go tools
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+            
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -66,7 +77,9 @@ jobs:
         working-directory: ./apps/ingestion-worker
 
       - name: Test Python
-        run: pytest --cov=./ --cov-report=xml:coverage-python.xml
+        run: |
+          pip install --no-cache-dir -r requirements.txt
+          pytest --cov=./ --cov-report=xml:coverage-python.xml
         working-directory: ./apps/ingestion-worker
 
       - name: Upload Python Coverage
