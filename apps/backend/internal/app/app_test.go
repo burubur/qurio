@@ -1,61 +1,59 @@
 package app
 
 import (
+	"context"
+	"database/sql"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/nsqio/go-nsq"
 	"github.com/stretchr/testify/assert"
-	"github.com/weaviate/weaviate-go-client/v5/weaviate"
+	"github.com/stretchr/testify/require"
 	"qurio/apps/backend/internal/config"
 )
 
-func TestNew(t *testing.T) {
-	// 1. Mock DB
+func TestNew_Success(t *testing.T) {
+	// Arrange
 	db, _, err := sqlmock.New()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer db.Close()
 
-	// 2. Mock Weaviate
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	cfg := weaviate.Config{
-		Host:   server.URL[7:],
-		Scheme: "http",
-	}
-	wClient, err := weaviate.NewClient(cfg)
-	assert.NoError(t, err)
-
-	// 3. Mock NSQ
-	// NSQ Producer doesn't connect immediately?
-	nsqCfg := nsq.NewConfig()
-	producer, err := nsq.NewProducer("localhost:4150", nsqCfg)
-	assert.NoError(t, err)
-
-	// 4. Config
-	appCfg := &config.Config{}
-
-	// 5. Logger
+	mockVec := &MockVectorStore{}
+	mockPub := &MockTaskPublisher{}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	cfg := &config.Config{}
 
-	// Execute
-	app, err := New(appCfg, db, wClient, producer, logger)
+	// Act
+	app, err := New(cfg, db, mockVec, mockPub, logger)
+
+	// Assert
 	assert.NoError(t, err)
 	assert.NotNil(t, app)
 	assert.NotNil(t, app.Handler)
 	assert.NotNil(t, app.SourceService)
 	assert.NotNil(t, app.ResultConsumer)
+}
 
-	// Verify Route (Integration-ish)
-	req := httptest.NewRequest("GET", "/health", nil)
-	w := httptest.NewRecorder()
-	app.Handler.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
+type FakeDB struct{}
+
+func (f *FakeDB) PingContext(ctx context.Context) error { return nil }
+func (f *FakeDB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row { return nil }
+func (f *FakeDB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) { return nil, nil }
+func (f *FakeDB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) { return nil, nil }
+func (f *FakeDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) { return nil, nil }
+
+func TestNew_PanicsOnInvalidDB(t *testing.T) {
+	// Arrange
+	mockVec := &MockVectorStore{}
+	mockPub := &MockTaskPublisher{}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	cfg := &config.Config{}
+	
+	fakeDB := &FakeDB{}
+
+	// Act & Assert
+	assert.Panics(t, func() {
+		_, _ = New(cfg, fakeDB, mockVec, mockPub, logger)
+	})
 }

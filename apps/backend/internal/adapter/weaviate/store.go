@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/worker"
+	"qurio/apps/backend/internal/vector"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/filters"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
@@ -17,6 +18,11 @@ type Store struct {
 
 func NewStore(client *weaviate.Client) *Store {
 	return &Store{client: client}
+}
+
+func (s *Store) EnsureSchema(ctx context.Context) error {
+	wAdapter := vector.NewWeaviateClientAdapter(s.client)
+	return vector.EnsureSchema(ctx, wAdapter)
 }
 
 func (s *Store) StoreChunk(ctx context.Context, chunk worker.Chunk) error {

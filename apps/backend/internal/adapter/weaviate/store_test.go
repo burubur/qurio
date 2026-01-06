@@ -143,3 +143,25 @@ func TestStore_DeleteChunksBySourceID(t *testing.T) {
 	err := store.DeleteChunksBySourceID(context.Background(), "src-1")
 	assert.NoError(t, err)
 }
+
+func TestStore_Search_NetworkError(t *testing.T) {
+	// 1. Start a server that always fails
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	// 2. Configure Weaviate client to point to this server
+	cfg := weaviate.Config{
+		Host:   server.URL[7:], // Strip http://
+		Scheme: "http",
+	}
+	client, _ := weaviate.NewClient(cfg)
+	store := NewStore(client)
+
+	// 3. Call Search
+	_, err := store.Search(context.Background(), "test", []float32{0.1}, 0.5, 10, nil)
+	
+	// 4. Expect Error
+	assert.Error(t, err)
+}

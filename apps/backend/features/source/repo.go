@@ -68,8 +68,18 @@ func (r *PostgresRepo) Get(ctx context.Context, id string) (*Source, error) {
 
 func (r *PostgresRepo) SoftDelete(ctx context.Context, id string) error {
 	query := `UPDATE sources SET deleted_at = NOW() WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, id)
-	return err
+	res, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (r *PostgresRepo) UpdateBodyHash(ctx context.Context, id, hash string) error {

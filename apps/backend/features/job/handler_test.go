@@ -2,6 +2,7 @@ package job_test
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -44,6 +45,16 @@ func (m *MockRepo) Count(ctx context.Context) (int, error) {
 	return args.Int(0), args.Error(1)
 }
 
+// MockPublisher
+type MockPublisher struct {
+	mock.Mock
+}
+
+func (m *MockPublisher) Publish(topic string, body []byte) error {
+	args := m.Called(topic, body)
+	return args.Error(0)
+}
+
 func TestHandler_List(t *testing.T) {
 	mockRepo := new(MockRepo)
 	svc := job.NewService(mockRepo, nil, slog.Default()) // nil nsq
@@ -58,6 +69,23 @@ func TestHandler_List(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
 }
 
+func TestHandler_Retry_NotFound(t *testing.T) {
+	mockRepo := new(MockRepo)
+	mockPub := new(MockPublisher)
+	svc := job.NewService(mockRepo, mockPub, slog.Default())
+	handler := job.NewHandler(svc)
+
+	mockRepo.On("Get", mock.Anything, "99").Return(nil, sql.ErrNoRows)
+
+	req := httptest.NewRequest("POST", "/jobs/99/retry", nil)
+	req.SetPathValue("id", "99")
+	w := httptest.NewRecorder()
+
+	handler.Retry(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Result().StatusCode)
+}
+
 func TestHandler_Retry(t *testing.T) {
-	// Skip Retry test due to NSQ dependency
+	// Skip Retry success test due to NSQ dependency simulation complexity 
+	// (channel/goroutine in Service) or add it if time permits.
 }

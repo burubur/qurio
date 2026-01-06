@@ -13,16 +13,11 @@ import (
 	"qurio/apps/backend/features/stats"
 	"qurio/apps/backend/internal/adapter/gemini"
 	"qurio/apps/backend/internal/adapter/reranker"
-	wstore "qurio/apps/backend/internal/adapter/weaviate"
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/retrieval"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
-	"qurio/apps/backend/internal/vector"
-
-	"github.com/nsqio/go-nsq"
-	"github.com/weaviate/weaviate-go-client/v5/weaviate"
 )
 
 type App struct {
@@ -33,28 +28,33 @@ type App struct {
 
 func New(
 	cfg *config.Config,
-	db *sql.DB,
-	wClient *weaviate.Client,
-	nsqProducer *nsq.Producer,
+	db Database,
+	vecStore VectorStore,
+	taskPub TaskPublisher,
 	logger *slog.Logger,
 ) (*App, error) {
 	
 	// 5. Initialize Adapters & Services
-	vecStore := wstore.NewStore(wClient)
+	// vecStore is passed as interface
 
 	// Feature: Settings
-	settingsRepo := settings.NewPostgresRepo(db)
+	// Cast db to *sql.DB for repositories that require it.
+	// This allows us to use interfaces in the signature (for mocking with sqlmock)
+	// while maintaining compatibility with existing repositories.
+	sqlDB := db.(*sql.DB)
+
+	settingsRepo := settings.NewPostgresRepo(sqlDB)
 	settingsService := settings.NewService(settingsRepo)
 	settingsHandler := settings.NewHandler(settingsService)
 
 	// Feature: Source
-	sourceRepo := source.NewPostgresRepo(db)
-	sourceService := source.NewService(sourceRepo, nsqProducer, vecStore, settingsService)
+	sourceRepo := source.NewPostgresRepo(sqlDB)
+	sourceService := source.NewService(sourceRepo, taskPub, vecStore, settingsService)
 	sourceHandler := source.NewHandler(sourceService)
 
 	// Feature: Job
-	jobRepo := job.NewPostgresRepo(db)
-	jobService := job.NewService(jobRepo, nsqProducer, logger)
+	jobRepo := job.NewPostgresRepo(sqlDB)
+	jobService := job.NewService(jobRepo, taskPub, logger)
 	jobHandler := job.NewHandler(jobService)
 
 	// Feature: Stats
@@ -123,19 +123,34 @@ func New(
 	sfAdapter := &sourceFetcherAdapter{repo: sourceRepo, settings: settingsService}
 	pmAdapter := &pageManagerAdapter{repo: sourceRepo}
 	
-	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo, jobRepo, sfAdapter, pmAdapter, nsqProducer)
-
-	// Ensure Schema (Weaviate) - moved here or keep in main? 
-	// Main did EnsureSchema before creating App. Let's assume schema is checked in main.
-	// But `vector.NewWeaviateClientAdapter` is needed for ensure schema.
-	// App creates `vecStore` but maybe we expose a helper or assume Main does it.
-	// I'll leave EnsureSchema in main.
+	resultConsumer := worker.NewResultConsumer(geminiEmbedder, vecStore, sourceRepo, jobRepo, sfAdapter, pmAdapter, taskPub)
 
 	return &App{
 		Handler:        mux,
 		SourceService:  sourceService,
 		ResultConsumer: resultConsumer,
 	}, nil
+}
+
+func (a *App) Run(ctx context.Context) error {
+	srv := &http.Server{
+		Addr:    ":8081",
+		Handler: a.Handler,
+	}
+
+	go func() {
+		<-ctx.Done()
+		slog.Info("shutting down server...")
+		if err := srv.Shutdown(context.Background()); err != nil {
+			slog.Error("server shutdown failed", "error", err)
+		}
+	}()
+
+	slog.Info("server starting", "port", 8081)
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
 
 // Adapter for SourceFetcher in Worker
@@ -195,7 +210,6 @@ func (a *pageManagerAdapter) CountPendingPages(ctx context.Context, sourceID str
 }
 
 // EnsureSchema Helper
-func EnsureSchema(ctx context.Context, client *weaviate.Client) error {
-	wAdapter := vector.NewWeaviateClientAdapter(client)
-	return vector.EnsureSchema(ctx, wAdapter)
+func EnsureSchema(ctx context.Context, store VectorStore) error {
+	return store.EnsureSchema(ctx)
 }

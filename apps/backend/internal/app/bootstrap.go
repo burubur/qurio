@@ -1,0 +1,119 @@
+package app
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"time"
+
+	"qurio/apps/backend/internal/config"
+	wstore "qurio/apps/backend/internal/adapter/weaviate"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/lib/pq"
+	"github.com/nsqio/go-nsq"
+	"github.com/weaviate/weaviate-go-client/v5/weaviate"
+)
+
+type Dependencies struct {
+	DB          *sql.DB
+	VectorStore VectorStore
+	NSQProducer *nsq.Producer
+}
+
+func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
+	// Database
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPass, cfg.DBName)
+	
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open db: %w", err)
+	}
+
+	// Retry loop
+	for i := 0; i < 10; i++ {
+		if err := db.Ping(); err == nil {
+			break
+		}
+		slog.Warn("failed to ping db, retrying...", "attempt", i+1)
+		time.Sleep(2 * time.Second)
+	}
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping db: %w", err)
+	}
+
+	// Migrations
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("migration driver error: %w", err)
+	}
+	// Assuming migrations are in the current working directory "migrations"
+	// However, usually path needs to be absolute or relative to where binary is run.
+	// main.go was likely running from apps/backend.
+	// We will stick to "file://migrations" as per plan and assume correct cwd.
+	m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
+	if err != nil {
+		return nil, fmt.Errorf("migration instance error: %w", err)
+	}
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return nil, fmt.Errorf("migration up error: %w", err)
+	}
+
+	// Weaviate
+	wCfg := weaviate.Config{Host: cfg.WeaviateHost, Scheme: cfg.WeaviateScheme}
+	wClient, err := weaviate.NewClient(wCfg)
+	if err != nil {
+		return nil, fmt.Errorf("weaviate client error: %w", err)
+	}
+	vecStore := wstore.NewStore(wClient)
+	
+	// Ensure Schema Retry
+	for i := 0; i < 10; i++ {
+		if err := vecStore.EnsureSchema(ctx); err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if err := vecStore.EnsureSchema(ctx); err != nil {
+		return nil, fmt.Errorf("weaviate schema error: %w", err)
+	}
+
+	// NSQ Producer
+	nsqCfg := nsq.NewConfig()
+	producer, err := nsq.NewProducer(cfg.NSQDHost, nsqCfg)
+	if err != nil {
+		return nil, fmt.Errorf("nsq producer error: %w", err)
+	}
+    
+    // Topic pre-creation (Logic from main.go)
+    createTopics(cfg.NSQDHost)
+
+	return &Dependencies{
+		DB:          db,
+		VectorStore: vecStore,
+		NSQProducer: producer,
+	}, nil
+}
+
+func createTopics(nsqdHost string) {
+    nsqHttpURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.task", "nsqd")
+	nsqResultURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.result", "nsqd")
+	
+	host, _, _ := net.SplitHostPort(nsqdHost)
+	if host != "" {
+		nsqHttpURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.task", host)
+		nsqResultURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.result", host)
+	}
+	
+	go func() {
+		time.Sleep(2 * time.Second)
+		http.Post(nsqHttpURL, "application/json", nil)
+		http.Post(nsqResultURL, "application/json", nil)
+	}()
+}

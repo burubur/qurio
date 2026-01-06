@@ -3,9 +3,11 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/nsqio/go-nsq"
+	"github.com/stretchr/testify/assert"
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/internal/middleware"
 )
@@ -14,10 +16,14 @@ import (
 type MockEmbedder struct {
 	LastCtx  context.Context
 	LastText string
+	ErrorToReturn error
 }
 func (m *MockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	m.LastCtx = ctx
 	m.LastText = text
+	if m.ErrorToReturn != nil {
+		return nil, m.ErrorToReturn
+	}
 	return []float32{0.1, 0.2}, nil
 }
 
@@ -34,6 +40,11 @@ func (m *MockStore) DeleteChunksByURL(ctx context.Context, sourceID, url string)
 	return nil
 }
 func (m *MockStore) CountChunks(ctx context.Context) (int, error) { return 0, nil }
+func (m *MockStore) EnsureSchema(ctx context.Context) error { return nil }
+func (m *MockStore) GetChunks(ctx context.Context, sourceID string) ([]Chunk, error) { return nil, nil }
+func (m *MockStore) GetChunksByURL(ctx context.Context, url string) ([]any, error) { return nil, nil }
+func (m *MockStore) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int, searchFilters map[string]interface{}) ([]any, error) { return nil, nil }
+
 
 type MockUpdater struct{}
 func (m *MockUpdater) UpdateStatus(ctx context.Context, id, status string) error { return nil }
@@ -160,6 +171,33 @@ func TestHandleMessage_WithMetadata(t *testing.T) {
 	if store.LastChunk.PageCount != 10 {
 		t.Errorf("Chunk PageCount mismatch. Got: %d, Want: 10", store.LastChunk.PageCount)
 	}
+}
+
+func TestResultConsumer_HandleMessage_InvalidJSON(t *testing.T) {
+	consumer := &ResultConsumer{}
+	msg := &nsq.Message{Body: []byte("{invalid-json")}
+	
+	// Should return nil to ack message (don't retry poison pill)
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+}
+
+func TestResultConsumer_HandleMessage_DependencyError(t *testing.T) {
+	embedder := &MockEmbedder{ErrorToReturn: fmt.Errorf("api error")}
+	consumer := NewResultConsumer(embedder, &MockStore{}, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, &MockPublisher{})
+	
+	payload := map[string]string{
+		"source_id": "src-1",
+		"content":   "test content",
+		"url":       "http://example.com",
+		"status":    "success",
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	// Should return error to trigger NSQ requeue
+	err := consumer.HandleMessage(msg)
+	assert.Error(t, err)
 }
 
 func contains(s, substr string) bool {

@@ -2,7 +2,9 @@ package job
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -51,6 +53,10 @@ func (h *Handler) Retry(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.Retry(ctx, id); err != nil {
 		slog.ErrorContext(ctx, "failed to retry job", "id", id, "error", err, "correlationId", correlationID)
+		if errors.Is(err, sql.ErrNoRows) {
+			h.writeError(ctx, w, "NOT_FOUND", "Job not found", http.StatusNotFound)
+			return
+		}
 		h.writeError(ctx, w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}

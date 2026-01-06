@@ -2,6 +2,7 @@ package source_test
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -228,6 +229,24 @@ func TestHandler_Delete(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
 }
 
+func TestHandler_Delete_NotFound(t *testing.T) {
+	mockRepo := new(MockRepo)
+	mockChunkStore := new(MockChunkStore)
+	mockSettings := new(MockSettingsService)
+	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
+	handler := source.NewHandler(svc)
+
+	mockChunkStore.On("DeleteChunksBySourceID", mock.Anything, "99").Return(nil)
+	mockRepo.On("SoftDelete", mock.Anything, "99").Return(sql.ErrNoRows)
+	
+	req := httptest.NewRequest("DELETE", "/sources/99", nil)
+	req.SetPathValue("id", "99")
+	w := httptest.NewRecorder()
+
+	handler.Delete(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Result().StatusCode)
+}
+
 func TestHandler_Get(t *testing.T) {
 	mockRepo := new(MockRepo)
 	mockChunkStore := new(MockChunkStore)
@@ -244,6 +263,23 @@ func TestHandler_Get(t *testing.T) {
 
 	handler.Get(w, req)
 	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+}
+
+func TestHandler_Get_NotFound(t *testing.T) {
+	mockRepo := new(MockRepo)
+	mockChunkStore := new(MockChunkStore)
+	mockSettings := new(MockSettingsService)
+	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
+	handler := source.NewHandler(svc)
+
+	mockRepo.On("Get", mock.Anything, "99").Return(nil, sql.ErrNoRows)
+
+	req := httptest.NewRequest("GET", "/sources/99", nil)
+	req.SetPathValue("id", "99")
+	w := httptest.NewRecorder()
+
+	handler.Get(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Result().StatusCode)
 }
 
 func TestHandler_GetPages(t *testing.T) {

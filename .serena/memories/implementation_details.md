@@ -1,10 +1,12 @@
-- **Logging:** Implemented `apps/backend/internal/logger` package with `ContextHandler` to automatically propagate `correlation_id` from context to JSON logs.
-- **Worker Logic:** Link discovery logic extracted to pure function `DiscoverLinks` in `apps/backend/internal/worker/link_discovery.go` to separate I/O from business logic.
-- **MCP Errors:** `qurio_search` now returns standard JSON-RPC errors (code -32603) for internal failures instead of embedded text errors.
-- **Ingestion Worker:** Refactored `handle_file_task` to return `list[dict]` matching `handle_web_task`, removing brittle manual list wrapping.
-- **Data Consistency:** 
-    - Standardized `Source` entity across stack.
-    - Backend `Source` struct now includes `UpdatedAt` field.
-    - Repository fetches `updated_at` column.
-    - Frontend `Source` interface uses `updated_at` (removed `lastSyncedAt`).
-- **Metadata Exposure:** Promoted metadata fields (`Author`, `CreatedAt`, `PageCount`, `Language`, `Type`, `SourceID`, `URL`) to top-level fields in `SearchResult` struct and refactored Weaviate adapter/MCP handler to use strong typing.
+- **App Architecture:** Refactored `apps/backend/internal/app` to use Dependency Injection with interfaces (`Database`, `VectorStore`, `TaskPublisher`).
+- **Bootstrap Logic:** Decoupled `main.go` by moving infrastructure initialization (DB, Migrations, Weaviate, NSQ Producer) to `apps/backend/internal/app/bootstrap.go`. This improves testability and separates concerns.
+- **Testability:**
+    - Created `mocks_test.go` in `app` package.
+    - Updated `app.New` to accept interfaces, allowing unit testing with mocks (using `sqlmock` for DB).
+    - `main.go` now acts as the Composition Root, initializing concrete adapters (`wstore.NewStore`, `nsq.NewProducer`) and passing them to `app.New`.
+    - Added deep testing for `ResultConsumer` (handling invalid JSON, dependency errors).
+    - Implemented table-driven tests for MCP `Handler` covering all tool invocations.
+    - Added network error simulation tests for `Weaviate` adapter.
+- **Error Handling:**
+    - Updated `source` and `job` handlers to explicitly check for `sql.ErrNoRows` and return `404 Not Found` (HTTP 404) with `NOT_FOUND` error code in JSON envelope.
+    - `source.Repository.SoftDelete` now checks `RowsAffected` to correctly report if a record was not found (returns `sql.ErrNoRows`).

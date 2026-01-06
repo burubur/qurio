@@ -293,3 +293,122 @@ func TestHandler_HandleMessage_Success(t *testing.T) {
 	// processRequest is 52.1% covered via ServeHTTP.
 	cancel()
 }
+
+func TestHandler_ProcessRequest_Table(t *testing.T) {
+	// Define Cases
+	tests := []struct {
+		name    string
+		req     JSONRPCRequest
+		setup   func(mr *MockRetriever, msm *MockSourceManager)
+		wantRes func(*JSONRPCResponse) bool
+		wantErr bool
+	}{
+		{
+			name: "Initialize",
+			req:  JSONRPCRequest{Method: "initialize", ID: 1},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {},
+			wantRes: func(r *JSONRPCResponse) bool {
+				res := r.Result.(map[string]interface{})
+				return res["protocolVersion"] == "2024-11-05"
+			},
+		},
+		{
+			name: "List Tools",
+			req:  JSONRPCRequest{Method: "tools/list", ID: 2},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {},
+			wantRes: func(r *JSONRPCResponse) bool {
+				 res := r.Result.(ListToolsResult)
+				 return len(res.Tools) > 0
+			},
+		},
+		{
+			 name: "Call Unknown Tool",
+			 req: JSONRPCRequest{Method: "tools/call", Params: json.RawMessage(`{"name": "unknown"}`), ID: 3},
+			 setup: func(mr *MockRetriever, msm *MockSourceManager) {},
+			 wantRes: func(r *JSONRPCResponse) bool {
+				 errMap := r.Error.(map[string]interface{})
+				 return errMap["code"].(int) == ErrMethodNotFound
+			 },
+		},
+		{
+			name: "List Sources",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_list_sources", "arguments": {}}`),
+				ID: 4,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {
+				msm.On("List", mock.Anything).Return([]source.Source{{ID: "s1", Name: "Source 1", Type: "web"}}, nil)
+			},
+			wantRes: func(r *JSONRPCResponse) bool {
+				res := r.Result.(ToolResult)
+				return strings.Contains(res.Content[0].Text, "s1")
+			},
+		},
+		{
+			name: "List Pages",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_list_pages", "arguments": {"source_id": "s1"}}`),
+				ID: 5,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {
+				msm.On("GetPages", mock.Anything, "s1").Return([]source.SourcePage{{ID: "p1", URL: "/page1"}}, nil)
+			},
+			wantRes: func(r *JSONRPCResponse) bool {
+				res := r.Result.(ToolResult)
+				return strings.Contains(res.Content[0].Text, "/page1")
+			},
+		},
+		{
+			name: "Search",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_search", "arguments": {"query": "test"}}`),
+				ID: 6,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {
+				mr.On("Search", mock.Anything, "test", mock.Anything).Return([]retrieval.SearchResult{{Content: "found"}}, nil)
+			},
+			wantRes: func(r *JSONRPCResponse) bool {
+				res := r.Result.(ToolResult)
+				return strings.Contains(res.Content[0].Text, "found")
+			},
+		},
+		{
+			name: "Read Page",
+			req: JSONRPCRequest{
+				Method: "tools/call",
+				Params: json.RawMessage(`{"name": "qurio_read_page", "arguments": {"url": "http://example.com"}}`),
+				ID: 7,
+			},
+			setup: func(mr *MockRetriever, msm *MockSourceManager) {
+				mr.On("GetChunksByURL", mock.Anything, "http://example.com").Return([]retrieval.SearchResult{{Content: "page content"}}, nil)
+			},
+			wantRes: func(r *JSONRPCResponse) bool {
+				res := r.Result.(ToolResult)
+				return strings.Contains(res.Content[0].Text, "page content")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mr := new(MockRetriever)
+			msm := new(MockSourceManager)
+			handler := NewHandler(mr, msm)
+			
+			tt.setup(mr, msm)
+			
+			res := handler.processRequest(context.Background(), tt.req)
+			if tt.wantErr {
+				assert.Nil(t, res)
+			} else {
+				assert.NotNil(t, res)
+				if !tt.wantRes(res) {
+					t.Errorf("wantRes failed for %s", tt.name)
+				}
+			}
+		})
+	}
+}

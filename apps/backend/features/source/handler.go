@@ -3,7 +3,9 @@ package source
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -145,6 +147,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.service.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			h.writeError(r.Context(), w, "NOT_FOUND", "Source not found", http.StatusNotFound)
+			return
+		}
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -154,6 +160,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ReSync(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.service.ReSync(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			h.writeError(r.Context(), w, "NOT_FOUND", "Source not found", http.StatusNotFound)
+			return
+		}
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -164,6 +174,10 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	detail, err := h.service.Get(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			h.writeError(r.Context(), w, "NOT_FOUND", "Source not found", http.StatusNotFound)
+			return
+		}
 		h.writeError(r.Context(), w, "INTERNAL_ERROR", err.Error(), http.StatusInternalServerError)
 		return
 	}
