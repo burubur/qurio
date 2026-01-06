@@ -1,34 +1,15 @@
-# Key Learnings: Test Coverage Boost (Jan 2026)
+# Testing and Ingestion Learnings (Updated 2026-01-06)
 
-## 1. Backend Testing Patterns (Go)
+## Ingestion Worker
+- **Architecture**: Hybrid async/sync model. Web crawling is async (crawl4ai), file processing is sync (docling) offloaded to `pebble.ProcessPool`.
+- **Testing**: Heavy reliance on mocking (pebble, crawl4ai).
+- **Recent Improvements (2026-01-06)**:
+    - **Metadata Extraction**: Logic extracted to pure functions (`extract_metadata_from_doc`). Handled edge cases (callables, NoneTypes) defensively.
+    - **Zombie Tasks**: `touch_loop` now uses `asyncio.wait_for(event.wait())` for immediate exit, preventing zombie processes on cancellation.
+    - **Concurrency**: Global `WORKER_SEMAPHORE` (8) enforced in `main.py` for all task types.
+    - **Error Handling**: `correlation_id` added to all NSQ failure payloads.
 
-### Mocking 3rd Party Clients (Weaviate)
-**Pattern:** Use `httptest.NewServer` to mock the Weaviate client, but **handle the initialization checks**.
-Weaviate client calls `/v1/meta` or `/v1/.well-known/ready` on startup. The mock server handler must verify `r.URL.Path` and return appropriate JSON (e.g., `{"version": "1.19.0"}`) for these checks before asserting on the actual API call.
-
-### Service Layer Testing
-**Pattern:** When `Service` is a concrete struct but uses a `Repository` interface, create a `MockRepository` struct in the test package.
-This avoids complex refactoring while allowing full isolation of the Service logic.
-
-### Sequential Mock Returns (Go)
-**Pattern:** When a method is called multiple times with different return values (e.g., key rotation), `testify/mock` can be tricky with `mock.Anything`.
-**Solution:** Use a "Manual Mock" struct with an internal counter to return sequence-specific values cleanly, or reset the mock state between assertions if possible.
-
-### Decoupling Main (Go)
-**Pattern:** To test application wiring (`main.go`), move the wiring logic into a `New(deps...)` function in an `internal/app` package.
-**Benefit:** Allows unit testing of the router/handler setup without spinning up the full binary or real infrastructure.
-
-## 2. Frontend Testing Patterns (Vue/Vitest)
-
-### Store Testing (Pinia)
-**Pattern:** Mock `global.fetch` using `vi.fn()` to test actions that make API calls.
-Ensure to `mockReset()` in `beforeEach` to avoid state leakage between tests.
-
-### Component Testing (Lucide Icons)
-**Pattern:** When testing components with many sub-components (like `lucide-vue-next` icons or UI library components), use **global stubs** to avoid parsing errors and focus on the logic.
-```typescript
-const globalStubs = {
-  Activity: { template: '<svg></svg>' },
-  Card: { template: '<div><slot /></div>' }
-}
-```
+## Testing Strategy Updates
+- **Metadata**: Use `pytest.mark.parametrize` for table-driven testing of extraction logic.
+- **Concurrency**: explicit semaphore saturation tests required.
+- **Logging**: Must verify stdlib bridge to structlog.

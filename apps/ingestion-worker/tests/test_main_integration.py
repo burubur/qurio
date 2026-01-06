@@ -1,8 +1,6 @@
 import sys
 from unittest.mock import MagicMock
-# Mock handlers.web to avoid crawl4ai dependency
-mock_web = MagicMock()
-sys.modules['handlers.web'] = mock_web
+# handlers.web is safe to import because conftest.py mocks crawl4ai
 
 import pytest
 import json

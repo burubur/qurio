@@ -17,6 +17,12 @@ logger = structlog.get_logger(__name__)
 # Global producer
 producer = None
 
+# Global concurrency semaphore
+# We use a value slightly higher than nsq_max_in_flight to allow for buffering,
+# or match it to enforce strict parallelism.
+# Defaulting to 8 matches the typical core count/worker capacity.
+WORKER_SEMAPHORE = asyncio.Semaphore(8)
+
 def handle_message(message):
     """
     pynsq callback. Must be sync.
@@ -42,8 +48,13 @@ async def process_message(message):
                 if current_task:
                     current_task.cancel()
                 return
-            await asyncio.sleep(10) # Touch often to prevent timeout
             
+            # Wait for stop signal or timeout (heartbeat interval)
+            try:
+                await asyncio.wait_for(stop_touch.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                pass # Continue loop
+
     touch_task = asyncio.create_task(touch_loop())
 
     try:
@@ -55,20 +66,23 @@ async def process_message(message):
         task_type = data.get('type')
         results_list = []
         
-        if task_type == 'web':
-            url = data.get('url')
-            exclusions = data.get('exclusions', [])
-            api_key = data.get('gemini_api_key')
-            results_list = await handle_web_task(url, exclusions=exclusions, api_key=api_key)
-        
-        elif task_type == 'file':
-            file_path = data.get('path')
-            results_list = await handle_file_task(file_path)
+        # Enforce global concurrency limit
+        async with WORKER_SEMAPHORE:
+            if task_type == 'web':
+                url = data.get('url')
+                exclusions = data.get('exclusions', [])
+                api_key = data.get('gemini_api_key')
+                results_list = await handle_web_task(url, exclusions=exclusions, api_key=api_key)
+            
+            elif task_type == 'file':
+                file_path = data.get('path')
+                results_list = await handle_file_task(file_path)
             
         if results_list and producer:
             for res in results_list:
                 result_payload = {
                     "source_id": source_id,
+                    "correlation_id": source_id,
                     "content": res['content'],
                     "metadata": res.get('metadata', {}),
                     "title": res.get('title', ''),
@@ -89,9 +103,10 @@ async def process_message(message):
                     logger.error("pub_failed", source_id=source_id, error=str(e))
 
         elif producer:
-            # Handle case where no results returned (e.g. all pages failed)
+            # Handle case where no results returned
             fail_payload = {
                 "source_id": source_id,
+                "correlation_id": source_id,
                 "status": "failed",
                 "error": "No content extracted",
                 "url": data.get('url', ''),
@@ -118,6 +133,7 @@ async def process_message(message):
             error_code = e.code
             fail_payload = {
                 "source_id": source_id,
+                "correlation_id": source_id,
                 "status": "failed",
                 "code": error_code,
                 "error": f"[{e.code}] {e}",
@@ -141,17 +157,15 @@ async def process_message(message):
 
     except asyncio.CancelledError:
         logger.warning("processing_cancelled_due_to_connection_loss", source_id=source_id if 'source_id' in locals() else "unknown")
-        # Do not finish message if cancelled, let it requeue or expire? 
-        # If connection lost, we can't finish anyway.
         return
 
     except Exception as e:
         logger.error("message_processing_failed", error=str(e))
         
-        # Publish failure result to backend to update status
         if producer and 'source_id' in locals():
             fail_payload = {
                 "source_id": source_id,
+                "correlation_id": source_id,
                 "status": "failed",
                 "error": str(e),
                 "url": data.get('url', ''),
@@ -167,7 +181,6 @@ async def process_message(message):
             except Exception as ex:
                 logger.error("pub_failed_in_error_handler", error=str(ex))
         
-        # Finish message so it doesn't loop forever
         try:
             message.finish()
         except Exception as ex:

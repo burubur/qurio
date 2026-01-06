@@ -9,18 +9,9 @@ from concurrent.futures import ProcessPoolExecutor, TimeoutError
 # from docling.datamodel.pipeline_options import PdfPipelineOptions
 # from docling.datamodel.base_models import InputFormat
 
+from exceptions import IngestionError, ERR_ENCRYPTED, ERR_INVALID_FORMAT, ERR_EMPTY, ERR_TIMEOUT
+
 logger = structlog.get_logger(__name__)
-
-# Error Taxonomy
-ERR_ENCRYPTED = "ERR_ENCRYPTED"
-ERR_INVALID_FORMAT = "ERR_INVALID_FORMAT"
-ERR_EMPTY = "ERR_EMPTY"
-ERR_TIMEOUT = "ERR_TIMEOUT"
-
-class IngestionError(Exception):
-    def __init__(self, code, message):
-        self.code = code
-        super().__init__(message)
 
 # Global converter variable (per process)
 converter = None
@@ -62,17 +53,88 @@ def init_worker():
         }
     )
 
+def extract_metadata_from_doc(doc, result, file_path: str) -> dict:
+    """
+    Extracts standardized metadata from a Docling document object.
+    """
+    
+    def unwrap(val):
+        if callable(val):
+            return val()
+        return val
+
+    # Title Strategy: Metadata Title > Filename > Fallback
+    title = None
+    if hasattr(doc, 'metadata') and doc.metadata:
+        raw_title = unwrap(doc.metadata.title)
+        if raw_title:
+            title = raw_title
+            
+    if not title:
+        if hasattr(doc, 'origin') and doc.origin:
+             raw_filename = unwrap(doc.origin.filename)
+             if raw_filename:
+                 title = raw_filename
+    
+    if not title:
+        title = os.path.basename(file_path)
+
+    # Author Strategy
+    author = None
+    if hasattr(doc, 'metadata') and doc.metadata:
+        authors = unwrap(doc.metadata.authors)
+        if authors:
+            if isinstance(authors, list):
+                # unwrapping elements if list itself is not callable but elements might be? 
+                # Docling usually doesn't have callable elements in a list, but let's be safe
+                clean_authors = [str(unwrap(a)) for a in authors]
+                author = ", ".join(clean_authors)
+            else:
+                author = str(authors)
+
+    # Date Strategy
+    created_at = None
+    if hasattr(doc, 'metadata') and doc.metadata:
+        val = unwrap(doc.metadata.creation_date)
+        if val:
+            created_at = str(val)
+
+    # Language Strategy
+    language = 'en'
+    if hasattr(doc, 'metadata') and doc.metadata:
+        val = unwrap(doc.metadata.language)
+        if val:
+            language = val
+
+    # Page Count Strategy
+    pages = 0
+    # doc.num_pages might be None, or a callable returning int, or int
+    if hasattr(doc, 'num_pages'):
+        val = unwrap(doc.num_pages)
+        if val is not None:
+            pages = int(val)
+    
+    # Fallback to result.pages if doc.num_pages failed
+    if pages == 0 and hasattr(result, 'pages'):
+         val = unwrap(result.pages)
+         if val is not None:
+             pages = len(val)
+
+    meta = {
+        "title": title,
+        "author": author,
+        "created_at": created_at,
+        "pages": pages,
+        "language": language,
+    }
+    
+    return meta
+
 def process_file_sync(file_path: str) -> dict:
     """
     Synchronous function running in a separate process.
     Performs CPU-intensive conversion and markdown export.
     """
-    # Simulate progress updates (Docling doesn't expose granular callbacks yet)
-    # Ideally we would call the backend webhook here, but we are in a sub-process
-    # without network config or proper async loop. 
-    # For now, we rely on the main loop to handle "Started" and "Finished".
-    # With Docling v2, we can't easily hook into the PDF page loop without a custom pipeline class.
-    # Future enhancement: subclass PdfPipeline to report page progress.
     try:
         if converter is None:
             raise RuntimeError("Converter not initialized in worker process")
@@ -82,64 +144,7 @@ def process_file_sync(file_path: str) -> dict:
         
         # Extract metadata (Standardized for Docling v2)
         try:
-            # Primary Source: Docling v2 'origin' and 'metadata' attributes on Document
-            # doc.origin -> filename, uri, format
-            # doc.metadata -> title, authors, date, language
-            doc = result.document
-            
-            # Title Strategy: Metadata Title > Filename > Fallback
-            title = None
-            if hasattr(doc, 'metadata') and doc.metadata and doc.metadata.title:
-                title = doc.metadata.title
-            elif hasattr(doc, 'origin') and doc.origin and doc.origin.filename:
-                title = doc.origin.filename
-            else:
-                title = os.path.basename(file_path)
-
-            # Author Strategy
-            author = None
-            if hasattr(doc, 'metadata') and doc.metadata and doc.metadata.authors:
-                if isinstance(doc.metadata.authors, list):
-                    author = ", ".join([str(a) for a in doc.metadata.authors])
-                else:
-                    author = str(doc.metadata.authors)
-
-            # Date Strategy
-            created_at = None
-            if hasattr(doc, 'metadata') and doc.metadata and doc.metadata.creation_date:
-                # Ensure we handle pydantic/native types correctly
-                val = doc.metadata.creation_date
-                if callable(val):
-                     val = val()
-                created_at = str(val)
-
-            # Language Strategy
-            language = 'en'
-            if hasattr(doc, 'metadata') and doc.metadata and doc.metadata.language:
-                language = doc.metadata.language
-
-            # Page Count Strategy
-            pages = 0
-            if hasattr(doc, 'num_pages'):
-                val = doc.num_pages
-                if callable(val):
-                    val = val()
-                pages = int(val)
-            elif hasattr(result, 'pages'):
-                 pages = len(result.pages)
-
-            meta = {
-                "title": title,
-                "author": author,
-                "created_at": created_at,
-                "pages": pages,
-                "language": language,
-            }
-            # Final sanity check: ensure no values are methods
-            for k, v in meta.items():
-                if callable(v):
-                    logger.warning("callable_metadata_found", key=k)
-                    meta[k] = str(v()) if v is not None else None
+            meta = extract_metadata_from_doc(result.document, result, file_path)
         except Exception as e:
             logger.warning("metadata_extraction_failed", error=str(e))
             # Safe Fallback

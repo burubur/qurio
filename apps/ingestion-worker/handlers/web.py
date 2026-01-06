@@ -36,6 +36,53 @@ INSTRUCTION = """
     - Numbered lists for sequential steps
 """
 
+def extract_web_metadata(result, url: str) -> dict:
+    """
+    Extracts metadata (title, path, links) from a crawl result.
+    """
+    # Extract internal links
+    # Crawl4AI result.links is usually a dictionary with 'internal' and 'external' keys
+    # containing lists of dicts (href, text, etc.)
+    internal_links = []
+    if result.links and 'internal' in result.links:
+            for link in result.links['internal']:
+                if 'href' in link:
+                    internal_links.append(link['href'])
+    
+    # Additional Regex Extraction for Markdown (e.g. llms.txt)
+    if result.markdown:
+        markdown_links = re.findall(r'\[.*?\]\((.*?)\)', result.markdown)
+        parsed_base = urlparse(url)
+        base_domain = parsed_base.netloc
+        
+        for link in markdown_links:
+            # Resolve relative URLs
+            full_url = urljoin(url, link)
+            # Filter internal
+            if urlparse(full_url).netloc == base_domain:
+                internal_links.append(full_url)
+
+    # De-duplicate
+    internal_links = list(set(internal_links))
+
+    # Extract title (simplistic regex fallback if not in result)
+    title = ""
+    if result.markdown:
+        match = re.search(r'^#\s+(.+)$', result.markdown, re.MULTILINE)
+        if match:
+            title = match.group(1).strip()
+    
+    # Extract path (breadcrumbs)
+    parsed_url = urlparse(result.url)
+    path_segments = [s for s in parsed_url.path.split('/') if s]
+    path_str = " > ".join(path_segments)
+    
+    return {
+        "title": title,
+        "path": path_str,
+        "links": internal_links
+    }
+
 async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str = None) -> dict:
     """
     Crawls a single page and returns content and discovered internal links.
@@ -85,51 +132,16 @@ async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str =
                 logger.error("crawl_failed", url=url, error=result.error_message)
                 raise Exception(f"Crawl failed: {result.error_message}")
                 
-            # Extract internal links
-            # Crawl4AI result.links is usually a dictionary with 'internal' and 'external' keys
-            # containing lists of dicts (href, text, etc.)
-            internal_links = []
-            if result.links and 'internal' in result.links:
-                 for link in result.links['internal']:
-                     if 'href' in link:
-                         internal_links.append(link['href'])
-            
-            # Additional Regex Extraction for Markdown (e.g. llms.txt)
-            if result.markdown:
-                markdown_links = re.findall(r'\[.*?\]\((.*?)\)', result.markdown)
-                parsed_base = urlparse(url)
-                base_domain = parsed_base.netloc
-                
-                for link in markdown_links:
-                    # Resolve relative URLs
-                    full_url = urljoin(url, link)
-                    # Filter internal
-                    if urlparse(full_url).netloc == base_domain:
-                        internal_links.append(full_url)
+            meta = extract_web_metadata(result, url)
 
-            # De-duplicate
-            internal_links = list(set(internal_links))
-
-            # Extract title (simplistic regex fallback if not in result)
-            title = ""
-            if result.markdown:
-                match = re.search(r'^#\s+(.+)$', result.markdown, re.MULTILINE)
-                if match:
-                    title = match.group(1).strip()
-            
-            # Extract path (breadcrumbs)
-            parsed_url = urlparse(result.url)
-            path_segments = [s for s in parsed_url.path.split('/') if s]
-            path_str = " > ".join(path_segments)
-
-            logger.info("crawl_completed", url=url, links_found=len(internal_links), title=title, path=path_str)
+            logger.info("crawl_completed", url=url, links_found=len(meta['links']), title=meta['title'], path=meta['path'])
 
             return [{
                 "url": result.url,
-                "title": title,
-                "path": path_str,
+                "title": meta['title'],
+                "path": meta['path'],
                 "content": result.markdown,
-                "links": internal_links
+                "links": meta['links']
             }]
 
     except asyncio.TimeoutError:
