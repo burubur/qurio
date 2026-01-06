@@ -17,12 +17,12 @@ import (
 	"qurio/apps/backend/internal/worker"
 )
 
-// MockEmbedder for integration test (we don't hit real Gemini)
-type MockEmbedder struct {
+// IntegrationMockEmbedder for integration test (we don't hit real Gemini)
+type IntegrationMockEmbedder struct {
 	mock.Mock
 }
 
-func (m *MockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+func (m *IntegrationMockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	// Return a dummy vector
 	return []float32{0.1, 0.2, 0.3}, nil
 }
@@ -88,7 +88,7 @@ func TestIngestIntegration(t *testing.T) {
 	sourceRepo := source.NewPostgresRepo(s.DB)
 	jobRepo := job.NewPostgresRepo(s.DB)
 	vectorStore := weaviate.NewStore(s.Weaviate)
-	embedder := new(MockEmbedder)
+	embedder := new(IntegrationMockEmbedder)
 	sourceFetcher := &TestSourceFetcher{Repo: sourceRepo}
 
 	// Ensure Weaviate Schema
