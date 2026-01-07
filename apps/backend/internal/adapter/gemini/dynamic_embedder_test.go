@@ -190,3 +190,39 @@ func TestDynamicEmbedder_KeyRotation(t *testing.T) {
 	
 	assert.Equal(t, 2, requestCount)
 }
+
+func TestDynamicEmbedder_Embed_ServerFailure(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer ts.Close()
+
+	mockRepo := new(MockSettingsRepo)
+	settingsSvc := settings.NewService(mockRepo)
+	mockRepo.On("Get", mock.Anything).Return(&settings.Settings{
+		GeminiAPIKey: "test-key",
+	}, nil)
+
+	embedder := NewDynamicEmbedder(settingsSvc, option.WithEndpoint(ts.URL))
+
+	_, err := embedder.Embed(context.Background(), "test")
+	assert.Error(t, err)
+}
+
+func TestDynamicEmbedder_Embed_TooManyRequests(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer ts.Close()
+
+	mockRepo := new(MockSettingsRepo)
+	settingsSvc := settings.NewService(mockRepo)
+	mockRepo.On("Get", mock.Anything).Return(&settings.Settings{
+		GeminiAPIKey: "test-key",
+	}, nil)
+
+	embedder := NewDynamicEmbedder(settingsSvc, option.WithEndpoint(ts.URL))
+
+	_, err := embedder.Embed(context.Background(), "test")
+	assert.Error(t, err)
+}

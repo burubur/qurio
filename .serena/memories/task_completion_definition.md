@@ -1,21 +1,7 @@
-# MVP Part 5.1 Completion
-
-## Completed Features
-- **Failed Jobs Management:**
-  - `failed_jobs` table and repository.
-  - `JobService` and API (`GET /jobs/failed`, `POST /jobs/:id/retry`).
-  - Worker `ResultConsumer` saves failed jobs.
-  - Frontend `JobsView` and `job.store`.
-- **Dashboard & Stats:**
-  - `StatsService` and API (`GET /stats`).
-  - Frontend `DashboardView` and `stats.store`.
-- **Source Cleanup:**
-  - `DeleteChunksBySourceID` in Weaviate adapter.
-  - `SourceService.Delete` calls cleanup before DB delete.
-- **Documentation:**
-  - Updated `README.md` with full usage and architecture guide.
-
-## Technical Details
-- **Idempotency:** Failed jobs can be retried safely.
-- **Data Integrity:** Deleting a source removes its chunks from Weaviate.
-- **Frontend:** Dashboard is now the home page. Sidebar includes Failed Jobs link.
+The test coverage plan for backend components (Middleware, Retrieval, Worker) has been generated at `docs/plans/2026-01-07-test-coverage-backend-3.md`. 
+It includes tasks for:
+1. Middleware Trace Chain Integrity (Unit Tests).
+2. Retrieval Service Table-Driven Unit Tests.
+3. Worker Poison Pill Tests (Unit).
+4. Worker Full Flow Integration Test (Unskipping and Fixing).
+Gemini Key Rotation tests were verified to exist in `dynamic_embedder_test.go`.

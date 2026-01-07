@@ -173,6 +173,14 @@ func TestHandleMessage_WithMetadata(t *testing.T) {
 	}
 }
 
+func TestResultConsumer_HandleMessage_EmptyBody(t *testing.T) {
+	consumer := &ResultConsumer{}
+	msg := &nsq.Message{Body: []byte("")}
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+}
+
 func TestResultConsumer_HandleMessage_InvalidJSON(t *testing.T) {
 	consumer := &ResultConsumer{}
 	msg := &nsq.Message{Body: []byte("{invalid-json")}

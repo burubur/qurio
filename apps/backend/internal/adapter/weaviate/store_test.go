@@ -165,3 +165,30 @@ func TestStore_Search_NetworkError(t *testing.T) {
 	// 4. Expect Error
 	assert.Error(t, err)
 }
+
+func TestStore_Search_GraphQLError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/meta" {
+			json.NewEncoder(w).Encode(map[string]interface{}{"version": "1.19.0"})
+			return
+		}
+		if r.URL.Path == "/v1/.well-known/live" || r.URL.Path == "/v1/.well-known/ready" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.URL.Path == "/v1/graphql" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"errors": []interface{}{
+					map[string]interface{}{"message": "syntax error"},
+				},
+			})
+			return
+		}
+	}))
+	defer server.Close()
+
+	store := newTestStore(t, server)
+	_, err := store.Search(context.Background(), "test", nil, 0.5, 10, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "syntax error")
+}

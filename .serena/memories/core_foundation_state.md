@@ -7,9 +7,11 @@
     - **Core Logic:** High coverage in `internal/text`, `internal/settings`, `internal/vector`.
     - **Wiring:** Refactored `main.go` into `internal/app` with **Dependency Injection**, enabling full wiring tests (`TestNew_Success`, `TestNew_PanicsOnInvalidDB`).
     - **Bootstrap:** `Bootstrap` function covers infrastructure initialization and retry logic (`TestBootstrap_ConfigurationError`).
-    - **Adapters:** Critical paths in `Gemini` (Key Rotation), `Weaviate` (Store/Search, Network Errors), and `NSQ` are fully tested.
+    - **Adapters:** Critical paths in `Gemini` (Key Rotation, 503/429 Failure), `Weaviate` (Store/Search, GraphQL Errors), and `NSQ` are fully tested.
     - **Handlers:** Standardized error handling (404/Not Found) verified in `source` and `job` features. MCP Handler fully covered via table-driven tests.
-    - **Workers:** `ResultConsumer` hardened with tests for invalid JSON and dependency failures.
+    - **Workers:** `ResultConsumer` hardened with tests for invalid JSON (Poison Pill), empty bodies, and dependency failures.
+    - **Middleware:** `CorrelationID` verified for header preservation and context injection.
+    - **Retrieval:** Service logic fully covered via Table-Driven Tests including reranker integration and error fallback.
 - **Frontend (Vue):** **100% Pass Rate** (64/64 Tests)
     - **UI Library:** Comprehensive tests for Shadcn wrappers (`Select`, `Card`, `Badge`) including complex portal interactions.
     - **Stores:** Robust error handling and edge case coverage for `source`, `settings`, `job`, and `stats`.
@@ -34,3 +36,6 @@
 
 ## Known Issues (Jan 6, 2026)
 - **None critical.** Previous issues with backend coverage and handler errors were resolved in `2026-01-06-test-coverage-boost-1.md` and `2026-01-06-test-coverage-boost-2.md` executions.
+
+## Active Plans (Jan 7, 2026)
+- **Backend Test Hardening:** Two active plans (`docs/plans/2026-01-07-test-coverage-backend-1.md` for Integration Suite, `docs/plans/2026-01-07-test-coverage-backend-2.md` for Unit/Hardening) targeting 100% resilient coverage.
