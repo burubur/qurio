@@ -6,3 +6,6 @@
     - Setup in `TestMain` or per-test `Setup()` to ensure isolation.
     - Use `testcontainers.WithWaitStrategy` to ensure services are fully ready before running tests.
     - Expose dynamic ports via `GetAppConfig()` to configure clients/handlers under test.
+- **Ingestion Worker Testing:**
+    - **PYTHONPATH:** When running `pytest` for the ingestion worker, explicitly set `PYTHONPATH=.` (e.g., `PYTHONPATH=. ./venv/bin/pytest`) to ensure local modules (like `handlers`, `config`, `logger`) are correctly resolved.
+    - **Dead Code:** Unused imports and variables (e.g., redundant semaphores, unused `exclusions` params) can accumulate. Periodic cleanup using static analysis or manual review is recommended to keep the worker codebase lean.

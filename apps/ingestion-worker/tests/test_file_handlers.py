@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import asyncio
 from concurrent.futures import Future
 import handlers.file
-from handlers.file import handle_file_task, ERR_ENCRYPTED, ERR_INVALID_FORMAT, ERR_TIMEOUT, IngestionError, CONCURRENCY_LIMIT
+from handlers.file import handle_file_task, ERR_ENCRYPTED, ERR_INVALID_FORMAT, ERR_TIMEOUT, IngestionError
 
 # Helper to create a done future for asyncio.wrap_future
 def create_done_future(result=None, exception=None):
@@ -71,15 +71,6 @@ async def test_timeout():
              with pytest.raises(IngestionError) as exc:
                  await handle_file_task("/tmp/slow.pdf")
              assert exc.value.code == ERR_TIMEOUT
-
-@pytest.mark.asyncio
-async def test_concurrency_limit():
-    """Verify semaphore configuration."""
-    # Ensure we are checking the actual value used in the module
-    assert isinstance(handlers.file.CONCURRENCY_LIMIT, asyncio.Semaphore)
-    # FIX: Don't check for == 4. Check that it is a positive integer
-    # (Checking exact CPU count in CI is brittle because runners vary)
-    assert handlers.file.CONCURRENCY_LIMIT._value > 0
 
 @pytest.mark.asyncio
 async def test_end_to_end_pdf_simulation():

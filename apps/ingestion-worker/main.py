@@ -61,7 +61,6 @@ async def process_message(message):
         data = json.loads(message.body)
         logger.info("message_received", data=data)
         
-        result_content = None
         source_id = data.get('id')
         task_type = data.get('type')
         results_list = []
@@ -70,9 +69,9 @@ async def process_message(message):
         async with WORKER_SEMAPHORE:
             if task_type == 'web':
                 url = data.get('url')
-                exclusions = data.get('exclusions', [])
+                # exclusions = data.get('exclusions', []) # Deprecated/Unused
                 api_key = data.get('gemini_api_key')
-                results_list = await handle_web_task(url, exclusions=exclusions, api_key=api_key)
+                results_list = await handle_web_task(url, api_key=api_key)
             
             elif task_type == 'file':
                 file_path = data.get('path')

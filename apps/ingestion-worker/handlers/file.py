@@ -1,9 +1,8 @@
 import asyncio
 import structlog
 import os
-import signal
 import pebble
-from concurrent.futures import ProcessPoolExecutor, TimeoutError
+from concurrent.futures import TimeoutError
 # Deferred imports for docling to ensure clean process initialization
 # from docling.document_converter import DocumentConverter, PdfFormatOption
 # from docling.datamodel.pipeline_options import PdfPipelineOptions
@@ -172,7 +171,6 @@ executor = pebble.ProcessPool(
     initializer=init_worker
 )
 
-CONCURRENCY_LIMIT = asyncio.Semaphore(8)
 # Increase timeout to 30 minutes to accommodate large PDF books with OCR
 TIMEOUT_SECONDS = 1800
 
@@ -183,46 +181,45 @@ async def handle_file_task(file_path: str) -> list[dict]:
     """
     logger.info("conversion_starting", path=file_path)
     
-    async with CONCURRENCY_LIMIT:
-        try:
-            # Schedule the task with a hard timeout managed by Pebble
-            future = executor.schedule(
-                process_file_sync, 
-                args=(file_path,), 
-                timeout=TIMEOUT_SECONDS
-            )
-            
-            # Bridge Pebble Future to AsyncIO
-            result = await asyncio.wrap_future(future)
-            
-            if not result["content"].strip():
-                 raise IngestionError(ERR_EMPTY, "File contains no text")
+    try:
+        # Schedule the task with a hard timeout managed by Pebble
+        future = executor.schedule(
+            process_file_sync, 
+            args=(file_path,), 
+            timeout=TIMEOUT_SECONDS
+        )
+        
+        # Bridge Pebble Future to AsyncIO
+        result = await asyncio.wrap_future(future)
+        
+        if not result["content"].strip():
+             raise IngestionError(ERR_EMPTY, "File contains no text")
 
-            return [{
-                "content": result['content'],
-                "metadata": result['metadata'],
-                "url": file_path,
-                "path": file_path,
-                "title": result['metadata'].get('title', ''),
-                "links": []
-            }]
+        return [{
+            "content": result['content'],
+            "metadata": result['metadata'],
+            "url": file_path,
+            "path": file_path,
+            "title": result['metadata'].get('title', ''),
+            "links": []
+        }]
 
-        except (TimeoutError, pebble.ProcessExpired):
-            logger.error("conversion_timeout_killed", path=file_path)
-            raise IngestionError(ERR_TIMEOUT, "Processing timed out and worker process was terminated")
-        except IngestionError:
-            raise
-        except Exception as e:
-            # Check for wrapped exceptions
-            err_msg = str(e).lower()
-            if "timeout" in err_msg:
-                 logger.error("conversion_timeout_exception", path=file_path)
-                 raise IngestionError(ERR_TIMEOUT, "Processing timed out")
+    except (TimeoutError, pebble.ProcessExpired):
+        logger.error("conversion_timeout_killed", path=file_path)
+        raise IngestionError(ERR_TIMEOUT, "Processing timed out and worker process was terminated")
+    except IngestionError:
+        raise
+    except Exception as e:
+        # Check for wrapped exceptions
+        err_msg = str(e).lower()
+        if "timeout" in err_msg:
+             logger.error("conversion_timeout_exception", path=file_path)
+             raise IngestionError(ERR_TIMEOUT, "Processing timed out")
 
-            logger.error("conversion_failed", path=file_path, error=str(e))
-            if "password" in err_msg or "encrypted" in err_msg:
-                 raise IngestionError(ERR_ENCRYPTED, "File is password protected")
-            elif "format" in err_msg:
-                 raise IngestionError(ERR_INVALID_FORMAT, "Invalid file format")
-            else:
-                 raise e
+        logger.error("conversion_failed", path=file_path, error=str(e))
+        if "password" in err_msg or "encrypted" in err_msg:
+             raise IngestionError(ERR_ENCRYPTED, "File is password protected")
+        elif "format" in err_msg:
+             raise IngestionError(ERR_INVALID_FORMAT, "Invalid file format")
+        else:
+             raise e

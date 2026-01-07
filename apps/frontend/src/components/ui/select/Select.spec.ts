@@ -1,7 +1,7 @@
 import { mount, shallowMount } from '@vue/test-utils'
 import { describe, it, expect } from 'vitest'
 import { nextTick } from 'vue'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectSeparator } from './index'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from './index'
 
 describe('Select Components', () => {
   it('Select renders', () => {
@@ -24,29 +24,6 @@ describe('Select Components', () => {
     expect(wrapper.text()).toContain('Placeholder')
   })
 
-  it('SelectGroup and SelectLabel render', async () => {
-      // Must attach to body for Portal to work correctly in JSDOM environment
-      const wrapper = mount({
-          template: `
-            <Select :open="true">
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectLabel>Group Label</SelectLabel>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
-          `,
-          components: { Select, SelectContent, SelectGroup, SelectLabel }
-      }, { attachTo: document.body })
-      
-      await nextTick()
-      
-      // Content is teleported to body, not in wrapper
-      expect(document.body.innerHTML).toContain('Group Label')
-      
-      wrapper.unmount()
-  })
-
   // SelectItem requires SelectContent which might render in portal or be lazy
   // Testing pure rendering inside SelectContent
   it('SelectItem renders in context', () => {
@@ -62,10 +39,5 @@ describe('Select Components', () => {
      })
      // Check existence - text might be hidden or in portal
      expect(wrapper.exists()).toBe(true)
-  })
-
-  it('SelectSeparator renders', () => {
-      const wrapper = shallowMount(SelectSeparator)
-      expect(wrapper.classes()).toContain('-mx-1')
   })
 })

@@ -1,11 +1,9 @@
 import asyncio
 import structlog
-import json
-import httpx
 import re
 from urllib.parse import urljoin, urlparse
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, LLMConfig
-from crawl4ai.content_filter_strategy import PruningContentFilter, LLMContentFilter
+from crawl4ai.content_filter_strategy import LLMContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from config import settings as app_settings
 
@@ -83,14 +81,11 @@ def extract_web_metadata(result, url: str) -> dict:
         "links": internal_links
     }
 
-async def handle_web_task(url: str, exclusions: list[str] = None, api_key: str = None) -> dict:
+async def handle_web_task(url: str, api_key: str = None) -> dict:
     """
     Crawls a single page and returns content and discovered internal links.
     """
     logger.info("crawl_starting", url=url)
-    
-    if exclusions is None:
-        exclusions = []
         
     # Use passed api_key or fallback to settings
     token = api_key if api_key else app_settings.gemini_api_key
