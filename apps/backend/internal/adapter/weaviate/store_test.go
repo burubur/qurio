@@ -192,3 +192,32 @@ func TestStore_Search_GraphQLError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "syntax error")
 }
+
+func TestStore_GetChunks(t *testing.T) {
+	server := newMockWeaviateServer(t, func(r *http.Request, body map[string]interface{}) {
+		assert.Equal(t, "/v1/graphql", r.URL.Path)
+	})
+	defer server.Close()
+
+	store := newTestStore(t, server)
+
+	chunks, err := store.GetChunks(context.Background(), "src-1")
+	assert.NoError(t, err)
+	assert.Len(t, chunks, 1)
+	assert.Equal(t, "hello world", chunks[0].Content)
+	assert.Equal(t, "src-1", chunks[0].SourceID)
+}
+
+func TestStore_GetChunksByURL(t *testing.T) {
+	server := newMockWeaviateServer(t, func(r *http.Request, body map[string]interface{}) {
+		assert.Equal(t, "/v1/graphql", r.URL.Path)
+	})
+	defer server.Close()
+
+	store := newTestStore(t, server)
+
+	results, err := store.GetChunksByURL(context.Background(), "http://example.com")
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "hello world", results[0].Content)
+}

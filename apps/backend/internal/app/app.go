@@ -209,7 +209,3 @@ func (a *pageManagerAdapter) CountPendingPages(ctx context.Context, sourceID str
 	return a.repo.CountPendingPages(ctx, sourceID)
 }
 
-// EnsureSchema Helper
-func EnsureSchema(ctx context.Context, store VectorStore) error {
-	return store.EnsureSchema(ctx)
-}

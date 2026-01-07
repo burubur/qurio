@@ -54,3 +54,33 @@ func TestRetry_Timeout(t *testing.T) {
 		t.Errorf("Expected 'timeout waiting for NSQ publish', got '%v'", err)
 	}
 }
+
+func (m *MockRepoService) Count(ctx context.Context) (int, error) { return 10, nil }
+
+func TestService_Count(t *testing.T) {
+	repo := &MockRepoService{}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	service := NewService(repo, nil, logger)
+
+	count, err := service.Count(context.Background())
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if count != 10 {
+		t.Errorf("Expected count 10, got %d", count)
+	}
+}
+
+func TestService_ResetStuckJobs(t *testing.T) {
+	repo := &MockRepoService{}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	service := NewService(repo, nil, logger)
+
+	count, err := service.ResetStuckJobs(context.Background())
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected count 0, got %d", count)
+	}
+}
