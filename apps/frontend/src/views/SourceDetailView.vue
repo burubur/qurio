@@ -16,6 +16,7 @@ const store = useSourceStore()
 const source = ref<any>(null)
 const pages = ref<SourcePage[]>([])
 const isLoading = ref(true)
+const isLoadingMore = ref(false)
 const selectedChunk = ref<any>(null)
 let pollingInterval: any = null
 
@@ -41,7 +42,11 @@ onMounted(async () => {
     // Poll if active
     if (source.value?.status === 'in_progress' || source.value?.status === 'pending' || source.value?.status === 'processing') {
       pollingInterval = setInterval(async () => {
-        source.value = await store.getSource(id) // Update status
+        const updatedSource = await store.pollSourceStatus(id) // Update status only
+        if (updatedSource && source.value) {
+           // Merge updates but preserve chunks
+           source.value = { ...source.value, ...updatedSource, chunks: source.value.chunks }
+        }
         await fetchPages()
         
         // Stop polling if done
@@ -52,6 +57,17 @@ onMounted(async () => {
     }
   }
 })
+
+const loadMoreChunks = async () => {
+  if (!source.value || isLoadingMore.value) return
+  isLoadingMore.value = true
+  const currentLength = source.value.chunks?.length || 0
+  const newChunks = await store.fetchChunks(source.value.id, currentLength, 100)
+  if (newChunks && newChunks.length > 0) {
+    source.value.chunks = [...(source.value.chunks || []), ...newChunks]
+  }
+  isLoadingMore.value = false
+}
 
 // Watch for chunk updates to preserve selection or auto-select
 watch(() => source.value?.chunks, (newChunks) => {
@@ -190,7 +206,6 @@ const copyToClipboard = (text: string) => {
           <h3 class="text-sm font-semibold flex items-center gap-2">
             <Layers class="h-4 w-4 text-primary" />
             Ingested Chunks
-            <Badge variant="secondary" class="ml-2 text-xs">{{ source.chunks?.length || 0 }}</Badge>
           </h3>
         </div>
 
@@ -225,6 +240,19 @@ const copyToClipboard = (text: string) => {
                  {{ chunk.content?.substring(0, 50) }}...
                </div>
              </button>
+             
+             <div v-if="source.chunks && source.chunks.length < source.total_chunks" class="p-3 text-center border-b border-border/50">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  class="w-full text-xs h-7"
+                  :disabled="isLoadingMore"
+                  @click="loadMoreChunks"
+                >
+                  <span v-if="isLoadingMore" class="animate-spin mr-2 h-3 w-3 border-2 border-primary border-t-transparent rounded-full"></span>
+                  Load More ({{ source.chunks.length }} / {{ source.total_chunks }})
+                </Button>
+             </div>
            </div>
 
            <!-- Detail View (Right Column) -->

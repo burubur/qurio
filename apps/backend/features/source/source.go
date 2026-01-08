@@ -60,8 +60,9 @@ type Repository interface {
 }
 
 type ChunkStore interface {
-	GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error)
+	GetChunks(ctx context.Context, sourceID string, limit, offset int) ([]worker.Chunk, error)
 	DeleteChunksBySourceID(ctx context.Context, sourceID string) error
+	CountChunksBySource(ctx context.Context, sourceID string) (int, error)
 }
 
 type EventPublisher interface {
@@ -199,22 +200,36 @@ type SourceDetail struct {
 	TotalChunks int            `json:"total_chunks"`
 }
 
-func (s *Service) Get(ctx context.Context, id string) (*SourceDetail, error) {
+func (s *Service) Get(ctx context.Context, id string, limit, offset int, includeChunks bool) (*SourceDetail, error) {
 	src, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	chunks, err := s.chunkStore.GetChunks(ctx, id)
+	if limit <= 0 {
+		limit = 100
+	}
+
+	totalChunks, err := s.chunkStore.CountChunksBySource(ctx, id)
 	if err != nil {
-		slog.Warn("failed to fetch chunks", "error", err, "source_id", id)
+		slog.Warn("failed to count chunks", "error", err, "source_id", id)
+	}
+
+	var chunks []worker.Chunk
+	if includeChunks {
+		chunks, err = s.chunkStore.GetChunks(ctx, id, limit, offset)
+		if err != nil {
+			slog.Warn("failed to fetch chunks", "error", err, "source_id", id)
+			chunks = []worker.Chunk{}
+		}
+	} else {
 		chunks = []worker.Chunk{}
 	}
 
 	return &SourceDetail{
 		Source:      *src,
 		Chunks:      chunks,
-		TotalChunks: len(chunks),
+		TotalChunks: totalChunks,
 	}, nil
 }
 

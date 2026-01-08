@@ -158,11 +158,18 @@ export const useSourceStore = defineStore('sources', () => {
     }
   }
 
-  async function getSource(id: string) {
-    isLoading.value = true
+  async function getSource(id: string, params: { limit?: number; offset?: number; exclude_chunks?: boolean } = {}, background = false) {
+    if (!background) isLoading.value = true
     error.value = null
     try {
-      const res = await fetch(`/api/sources/${id}`)
+      const query = new URLSearchParams()
+      if (params.limit !== undefined) query.append('limit', params.limit.toString())
+      if (params.offset !== undefined) query.append('offset', params.offset.toString())
+      if (params.exclude_chunks) query.append('exclude_chunks', 'true')
+      
+      const queryString = query.toString() ? `?${query.toString()}` : ''
+      const res = await fetch(`/api/sources/${id}${queryString}`)
+
       if (!res.ok) throw new Error(`Failed to fetch source details: ${res.statusText}`)
       const json = await res.json()
       return json.data as Source
@@ -170,8 +177,27 @@ export const useSourceStore = defineStore('sources', () => {
       error.value = e.message || 'Unknown error'
       return null
     } finally {
-      isLoading.value = false
+      if (!background) isLoading.value = false
     }
+  }
+
+  async function fetchChunks(id: string, offset: number, limit = 100) {
+    try {
+        const query = new URLSearchParams()
+        query.append('limit', limit.toString())
+        query.append('offset', offset.toString())
+        const res = await fetch(`/api/sources/${id}?${query.toString()}`)
+        if (!res.ok) throw new Error(`Failed to fetch chunks`)
+        const json = await res.json()
+        return (json.data as Source).chunks || []
+    } catch (e) {
+        console.error(e)
+        return []
+    }
+  }
+
+  async function pollSourceStatus(id: string) {
+      return getSource(id, { exclude_chunks: true }, true)
   }
 
   async function getSourcePages(id: string) {
@@ -198,6 +224,8 @@ export const useSourceStore = defineStore('sources', () => {
     getSource,
     getSourcePages,
     startPolling,
-    stopPolling
+    stopPolling,
+    fetchChunks,
+    pollSourceStatus
   }
 })

@@ -105,14 +105,19 @@ type MockChunkStore struct {
 	mock.Mock
 }
 
-func (m *MockChunkStore) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) {
-	args := m.Called(ctx, sourceID)
+func (m *MockChunkStore) GetChunks(ctx context.Context, sourceID string, limit, offset int) ([]worker.Chunk, error) {
+	args := m.Called(ctx, sourceID, limit, offset)
 	return args.Get(0).([]worker.Chunk), args.Error(1)
 }
 
 func (m *MockChunkStore) DeleteChunksBySourceID(ctx context.Context, sourceID string) error {
 	args := m.Called(ctx, sourceID)
 	return args.Error(0)
+}
+
+func (m *MockChunkStore) CountChunksBySource(ctx context.Context, sourceID string) (int, error) {
+	args := m.Called(ctx, sourceID)
+	return args.Int(0), args.Error(1)
 }
 
 type MockSettingsService struct {
@@ -234,4 +239,41 @@ func TestService_ReSync(t *testing.T) {
 	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
 	mockPub.AssertExpectations(t)
+}
+
+func TestService_Get_Pagination(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	id := "src-1"
+	src := &Source{ID: id, URL: "http://example.com"}
+
+	mockRepo.On("Get", mock.Anything, id).Return(src, nil)
+	mockChunk.On("CountChunksBySource", mock.Anything, id).Return(150, nil)
+	mockChunk.On("GetChunks", mock.Anything, id, 10, 5).Return([]worker.Chunk{{Content: "c1"}}, nil)
+
+	detail, err := svc.Get(context.Background(), id, 10, 5, true)
+	assert.NoError(t, err)
+	assert.Equal(t, 150, detail.TotalChunks)
+	assert.Len(t, detail.Chunks, 1)
+}
+
+func TestService_Get_ExcludeChunks(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockChunk := new(MockChunkStore)
+	svc := NewService(mockRepo, nil, mockChunk, nil)
+
+	id := "src-1"
+	src := &Source{ID: id, URL: "http://example.com"}
+
+	mockRepo.On("Get", mock.Anything, id).Return(src, nil)
+	mockChunk.On("CountChunksBySource", mock.Anything, id).Return(150, nil)
+	// GetChunks should NOT be called
+
+	detail, err := svc.Get(context.Background(), id, 10, 5, false)
+	assert.NoError(t, err)
+	assert.Equal(t, 150, detail.TotalChunks)
+	assert.Empty(t, detail.Chunks)
+	mockChunk.AssertNotCalled(t, "GetChunks")
 }

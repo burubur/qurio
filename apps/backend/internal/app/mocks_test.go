@@ -39,8 +39,12 @@ func (m *MockVectorStore) Search(ctx context.Context, query string, vector []flo
 	return m.SearchRes, m.SearchErr
 }
 
-func (m *MockVectorStore) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) {
+func (m *MockVectorStore) GetChunks(ctx context.Context, sourceID string, limit, offset int) ([]worker.Chunk, error) {
 	return m.GetChunksRes, m.GetChunksErr
+}
+
+func (m *MockVectorStore) CountChunksBySource(ctx context.Context, sourceID string) (int, error) {
+	return 0, nil
 }
 
 func (m *MockVectorStore) GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error) {

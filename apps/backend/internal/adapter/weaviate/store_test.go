@@ -201,7 +201,7 @@ func TestStore_GetChunks(t *testing.T) {
 
 	store := newTestStore(t, server)
 
-	chunks, err := store.GetChunks(context.Background(), "src-1")
+	chunks, err := store.GetChunks(context.Background(), "src-1", 100, 0)
 	assert.NoError(t, err)
 	assert.Len(t, chunks, 1)
 	assert.Equal(t, "hello world", chunks[0].Content)

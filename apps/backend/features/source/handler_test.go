@@ -96,8 +96,8 @@ type MockChunkStore struct {
 	mock.Mock
 }
 
-func (m *MockChunkStore) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) {
-	args := m.Called(ctx, sourceID)
+func (m *MockChunkStore) GetChunks(ctx context.Context, sourceID string, limit, offset int) ([]worker.Chunk, error) {
+	args := m.Called(ctx, sourceID, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -107,6 +107,11 @@ func (m *MockChunkStore) GetChunks(ctx context.Context, sourceID string) ([]work
 func (m *MockChunkStore) DeleteChunksBySourceID(ctx context.Context, sourceID string) error {
 	args := m.Called(ctx, sourceID)
 	return args.Error(0)
+}
+
+func (m *MockChunkStore) CountChunksBySource(ctx context.Context, sourceID string) (int, error) {
+	args := m.Called(ctx, sourceID)
+	return args.Int(0), args.Error(1)
 }
 
 // MockSettingsService
@@ -304,7 +309,8 @@ func TestHandler_Get(t *testing.T) {
 	handler := source.NewHandler(svc)
 
 	mockRepo.On("Get", mock.Anything, "1").Return(&source.Source{ID: "1"}, nil)
-	mockChunkStore.On("GetChunks", mock.Anything, "1").Return([]worker.Chunk{}, nil)
+	mockChunkStore.On("CountChunksBySource", mock.Anything, "1").Return(10, nil)
+	mockChunkStore.On("GetChunks", mock.Anything, "1", 100, 0).Return([]worker.Chunk{}, nil)
 
 	req := httptest.NewRequest("GET", "/sources/1", nil)
 	req.SetPathValue("id", "1")
@@ -312,6 +318,45 @@ func TestHandler_Get(t *testing.T) {
 
 	handler.Get(w, req)
 	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+}
+
+func TestHandler_Get_Pagination(t *testing.T) {
+	mockRepo := new(MockRepo)
+	mockChunkStore := new(MockChunkStore)
+	mockSettings := new(MockSettingsService)
+	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
+	handler := source.NewHandler(svc)
+
+	mockRepo.On("Get", mock.Anything, "1").Return(&source.Source{ID: "1"}, nil)
+	mockChunkStore.On("CountChunksBySource", mock.Anything, "1").Return(200, nil)
+	mockChunkStore.On("GetChunks", mock.Anything, "1", 20, 10).Return([]worker.Chunk{}, nil)
+
+	req := httptest.NewRequest("GET", "/sources/1?limit=20&offset=10", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	handler.Get(w, req)
+	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+}
+
+func TestHandler_Get_ExcludeChunks(t *testing.T) {
+	mockRepo := new(MockRepo)
+	mockChunkStore := new(MockChunkStore)
+	mockSettings := new(MockSettingsService)
+	svc := source.NewService(mockRepo, nil, mockChunkStore, mockSettings)
+	handler := source.NewHandler(svc)
+
+	mockRepo.On("Get", mock.Anything, "1").Return(&source.Source{ID: "1"}, nil)
+	mockChunkStore.On("CountChunksBySource", mock.Anything, "1").Return(200, nil)
+	// GetChunks shouldn't be called
+
+	req := httptest.NewRequest("GET", "/sources/1?exclude_chunks=true", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+
+	handler.Get(w, req)
+	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+	mockChunkStore.AssertNotCalled(t, "GetChunks")
 }
 
 func TestHandler_Get_NotFound(t *testing.T) {

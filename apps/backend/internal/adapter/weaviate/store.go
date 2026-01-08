@@ -231,7 +231,7 @@ func (s *Store) Search(ctx context.Context, query string, vector []float32, alph
 	return results, nil
 }
 
-func (s *Store) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) {
+func (s *Store) GetChunks(ctx context.Context, sourceID string, limit, offset int) ([]worker.Chunk, error) {
 	fields := []graphql.Field{
 		{Name: "content"},
 		{Name: "url"},
@@ -251,7 +251,8 @@ func (s *Store) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk,
 	res, err := s.client.GraphQL().Get().
 		WithClassName("DocumentChunk").
 		WithWhere(where).
-		WithLimit(100).
+		WithLimit(limit).
+		WithOffset(offset).
 		WithFields(fields...).
 		Do(ctx)
 	
@@ -403,6 +404,45 @@ func (s *Store) GetChunksByURL(ctx context.Context, url string) ([]retrieval.Sea
 func (s *Store) CountChunks(ctx context.Context) (int, error) {
 	meta, err := s.client.GraphQL().Aggregate().
 		WithClassName("DocumentChunk").
+		WithFields(graphql.Field{
+			Name: "meta",
+			Fields: []graphql.Field{
+				{Name: "count"},
+			},
+		}).
+		Do(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(meta.Errors) > 0 {
+		return 0, fmt.Errorf("graphql error: %v", meta.Errors)
+	}
+	
+	if data, ok := meta.Data["Aggregate"].(map[string]interface{}); ok {
+		if chunks, ok := data["DocumentChunk"].([]interface{}); ok {
+			if len(chunks) > 0 {
+				if props, ok := chunks[0].(map[string]interface{}); ok {
+					if metaStats, ok := props["meta"].(map[string]interface{}); ok {
+						if count, ok := metaStats["count"].(float64); ok {
+							return int(count), nil
+						}
+					}
+				}
+			}
+		}
+	}
+	return 0, nil
+}
+
+func (s *Store) CountChunksBySource(ctx context.Context, sourceID string) (int, error) {
+	where := filters.Where().
+		WithOperator(filters.Equal).
+		WithPath([]string{"sourceId"}).
+		WithValueString(sourceID)
+
+	meta, err := s.client.GraphQL().Aggregate().
+		WithClassName("DocumentChunk").
+		WithWhere(where).
 		WithFields(graphql.Field{
 			Name: "meta",
 			Fields: []graphql.Field{

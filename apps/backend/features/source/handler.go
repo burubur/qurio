@@ -192,7 +192,22 @@ func (h *Handler) ReSync(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	detail, err := h.service.Get(r.Context(), id)
+
+	limit := 100
+	offset := 0
+	includeChunks := true
+
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		fmt.Sscanf(o, "%d", &offset)
+	}
+	if exc := r.URL.Query().Get("exclude_chunks"); exc == "true" {
+		includeChunks = false
+	}
+
+	detail, err := h.service.Get(r.Context(), id, limit, offset, includeChunks)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			h.writeError(r.Context(), w, "NOT_FOUND", "Source not found", http.StatusNotFound)

@@ -23,9 +23,10 @@ type VectorStore interface {
 	DeleteChunksByURL(ctx context.Context, sourceID, url string) error
 	DeleteChunksBySourceID(ctx context.Context, sourceID string) error
 	Search(ctx context.Context, query string, vector []float32, alpha float32, limit int, searchFilters map[string]interface{}) ([]retrieval.SearchResult, error)
-	GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error)
+	GetChunks(ctx context.Context, sourceID string, limit, offset int) ([]worker.Chunk, error)
 	GetChunksByURL(ctx context.Context, url string) ([]retrieval.SearchResult, error)
 	CountChunks(ctx context.Context) (int, error)
+	CountChunksBySource(ctx context.Context, sourceID string) (int, error)
 	EnsureSchema(ctx context.Context) error
 }
 

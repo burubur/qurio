@@ -1,8 +1,6 @@
-- Implemented `Dialog` component in `apps/frontend/src/components/ui/dialog` using `reka-ui`.
-- Added Gemini API Key check to `SourceForm.vue` to prevent ingestion without a key.
-- Used `reka-ui` (Radix Vue) for accessible modal primitives.
-- Added `Tooltip` info to Gemini API Key setting in `Settings.vue`.
-- Updated Crawl Depth hints in `SourceForm.vue` to warn about recursive crawling (Horizontal layout).
-- Improved Dialog Cancel button visibility in `SourceForm.vue` (Ghost variant).
-- Fixed bug where API Key Dialog remained open after adding key in `SourceForm.vue`.
-- Enforced `text-foreground` on `DialogTitle` for better readability.
+Plan created for fixing chunks pagination limit.
+Plan file: docs/plans/2026-01-08-chunks-pagination-1.md
+Key changes:
+- Backend: Add pagination and CountChunksBySource to Weaviate store.
+- Backend: Update Service/Handler to support limit/offset.
+- Frontend: Update Store and View to support "Load More".

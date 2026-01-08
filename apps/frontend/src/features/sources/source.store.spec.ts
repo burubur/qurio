@@ -191,4 +191,51 @@ describe('Source Store', () => {
     store.stopPolling()
     vi.useRealTimers()
   })
+
+  it('getSource sends pagination params', async () => {
+    const store = useSourceStore()
+    
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: {} })
+    })
+
+    await store.getSource('1', { limit: 20, offset: 10, exclude_chunks: true })
+    
+    const url = fetchMock.mock.calls[0][0]
+    expect(url).toContain('limit=20')
+    expect(url).toContain('offset=10')
+    expect(url).toContain('exclude_chunks=true')
+  })
+
+  it('fetchChunks fetches only chunks', async () => {
+    const store = useSourceStore()
+    const mockChunks = [{ content: 'c1' }]
+    
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { chunks: mockChunks } })
+    })
+
+    const chunks = await store.fetchChunks('1', 50, 20)
+    
+    const url = fetchMock.mock.calls[0][0]
+    expect(url).toContain('limit=20')
+    expect(url).toContain('offset=50')
+    expect(chunks).toEqual(mockChunks)
+  })
+
+  it('pollSourceStatus fetches with exclude_chunks', async () => {
+    const store = useSourceStore()
+    
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { id: '1', status: 'completed' } })
+    })
+
+    await store.pollSourceStatus('1')
+    
+    const url = fetchMock.mock.calls[0][0]
+    expect(url).toContain('exclude_chunks=true')
+  })
 })

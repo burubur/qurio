@@ -48,7 +48,8 @@ func (m *TestSettings) Get(ctx context.Context) (*settings.Settings, error) { re
 
 type TestChunkStore struct { ChunkStore }
 func (m *TestChunkStore) DeleteChunksBySourceID(ctx context.Context, sourceID string) error { return nil }
-func (m *TestChunkStore) GetChunks(ctx context.Context, sourceID string) ([]worker.Chunk, error) { return nil, nil }
+func (m *TestChunkStore) GetChunks(ctx context.Context, sourceID string, limit, offset int) ([]worker.Chunk, error) { return nil, nil }
+func (m *TestChunkStore) CountChunksBySource(ctx context.Context, sourceID string) (int, error) { return 0, nil }
 
 func TestCreate_PropagatesCorrelationID(t *testing.T) {
 	pub := &TestPublisher{}

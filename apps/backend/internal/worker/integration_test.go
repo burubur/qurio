@@ -150,7 +150,7 @@ func TestIngestIntegration(t *testing.T) {
 	// 4. Verify Side Effects
 
 	// A. Check Vector Store
-	chunks, err := vectorStore.GetChunks(ctx, src.ID)
+	chunks, err := vectorStore.GetChunks(ctx, src.ID, 100, 0)
 	require.NoError(t, err)
 	assert.NotEmpty(t, chunks)
 	assert.Contains(t, chunks[0].Content, "Hello World")
