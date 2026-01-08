@@ -109,7 +109,7 @@ Configuration is managed via the **Settings** page in the UI or environment vari
 
 ### 1. Add Data Sources
 Navigate to the Admin Dashboard ([http://localhost:3000](http://localhost:3000)) and click **"Add Source"**.
-*   **Web Crawl:** Enter a documentation URL (e.g., `https://docs.encore.dev`). Configure depth and exclusion patterns.
+*   **Web Crawl:** Enter a documentation URL (e.g., `https://docs.docker.com`). Configure depth and exclusion patterns.
 *   **File Upload:** Drag and drop PDFs or Markdown files.
 
 ### 2. Connect Your AI Agent (MCP)
@@ -130,7 +130,21 @@ Add the following to your MCP settings:
 
 ### 3. Query
 Ask your AI agent a question. It will now have access to the documentation you indexed!
-> "How do I configure connection pooling in Encore?"
+> "How do I configure a healthcheck in Docker Compose?"
+
+### 4. Available Tools
+Once connected, your agent will have access to the following tools:
+
+| Tool | Description |
+|------|-------------|
+| `qurio_search` | **Search your knowledge base.** Supports hybrid search (keywords + vectors). Use this to find relevant documentation or code examples. |
+| `qurio_list_sources` | **List all available data sources.** Useful to see what documentation is currently indexed. |
+| `qurio_list_pages` | **List pages within a source.** Helpful for exploring the structure of a documentation site. |
+| `qurio_read_page` | **Read a full page.** Retrieves the complete content of a specific document or web page found via search or listing. |
+
+> [!TIP]
+> **Unlock the full potential of your Agent**<br>
+> Check out the **[Agent Prompting Guide](docs/agent.md)** for best practices, workflow examples, and **system prompt templates** (`CLAUDE.md`, `GEMINI.md`) to paste into your project.
 
 ## 📄 License
 

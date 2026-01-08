@@ -29,3 +29,39 @@ flags:
   frontend:
     paths:
       - apps/frontend/ # or wherever your typescript code lives
+
+ignore:
+  # --- Universal & Documentation ---
+  - "**/*.md"
+  - "docs/**/*"
+  - ".gemini/**/*"
+  - ".serena/**/*"
+  - ".github/**/*"
+  - "**/verify_infra.sh"
+  - "docker-compose.yml"
+
+  # --- Testing Infrastructure (Global) ---
+  - "**/*_test.go"             # All Go test files
+  - "**/*.spec.ts"             # All Frontend spec files
+  - "**/tests/**/*"            # Python/E2E test directories
+  - "**/test-files/**/*"       # Test assets (Markdown/PDFs in e2e)
+  - "apps/backend/internal/testutils/**/*" # <--- The specific file you asked about
+  - "apps/e2e/**/*"            # Playwright E2E folder
+
+  # --- Backend (Go) ---
+  - "apps/backend/main.go"     # App entry point (not unit testable)
+  - "apps/backend/migrations/**/*" # SQL Migrations
+  - "apps/backend/internal/app/mocks_test.go" # Generated mocks
+
+  # --- Frontend (Vue/TypeScript) ---
+  - "apps/frontend/*.config.js"  # Tailwind, PostCSS configs
+  - "apps/frontend/*.config.ts"  # Vite, Playwright configs
+  - "apps/frontend/*.config.mjs" # ESLint config
+  - "apps/frontend/src/main.ts"  # Vue entry point
+  - "apps/frontend/src/lib/utils.ts" # Shadcn/Tailwind boilerplate
+  - "apps/frontend/src/components/ui/**/*" # Shadcn UI components (Treat as vendored code)
+
+  # --- Ingestion Worker (Python) ---
+  - "apps/ingestion-worker/main.py"    # Worker entry point
+  - "apps/ingestion-worker/config.py"  # Configuration loader
+  - "apps/ingestion-worker/logger.py"  # Logging setup
