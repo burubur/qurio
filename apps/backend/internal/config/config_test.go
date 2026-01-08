@@ -30,3 +30,12 @@ func TestLoadConfig_FromEnvFile(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "loaded-from-file", cfg.DBHost)
 }
+
+func TestLoadConfig_RerankAPIKey(t *testing.T) {
+	os.Setenv("RERANK_API_KEY", "test-key")
+	defer os.Unsetenv("RERANK_API_KEY")
+
+	cfg, err := config.Load()
+	assert.NoError(t, err)
+	assert.Equal(t, "test-key", cfg.RerankAPIKey)
+}

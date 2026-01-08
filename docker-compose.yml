@@ -19,11 +19,11 @@ services:
     image: postgres:16-alpine
     ports: ["5432:5432"]
     environment:
-      POSTGRES_USER: qurio
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: qurio
+      POSTGRES_USER: ${DB_USER:-qurio}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-qurio}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qurio"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-qurio}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -56,8 +56,12 @@ services:
       nsqd:
         condition: service_healthy
     environment:
-      - NSQ_LOOKUPD_HTTP=nsqlookupd:4161
-      - NSQD_TCP_ADDRESS=nsqd:4150
+      # Use DOCKER_ prefix to avoid collision with local .env variables
+      - NSQ_LOOKUPD_HTTP=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
+      - NSQD_TCP_ADDRESS=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
+      - NSQ_MAX_IN_FLIGHT=${NSQ_MAX_IN_FLIGHT:-8}
+      - INGESTION_CONCURRENCY=${INGESTION_CONCURRENCY:-50}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     deploy:
       resources:
         limits:
@@ -70,12 +74,20 @@ services:
     build: ./apps/backend
     ports: ["8081:8081"]
     environment:
-      - QURIO_UPLOAD_DIR=/var/lib/qurio/uploads
-      - DB_HOST=postgres
-      - WEAVIATE_HOST=weaviate:8080
-      - NSQ_LOOKUPD=nsqlookupd:4161
-      # Point to nsqd directly for producer if needed, or lookupd
-      - NSQD_HOST=nsqd:4150
+      - QURIO_UPLOAD_DIR=${QURIO_UPLOAD_DIR:-/var/lib/qurio/uploads}
+      # Use DOCKER_ prefix to avoid collision with local .env variables
+      - DB_HOST=${DOCKER_DB_HOST:-postgres}
+      - DB_PORT=${DOCKER_DB_PORT:-5432}
+      - DB_USER=${DB_USER:-qurio}
+      - DB_PASS=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-qurio}
+      - WEAVIATE_HOST=${DOCKER_WEAVIATE_HOST:-weaviate:8080}
+      - WEAVIATE_SCHEME=${WEAVIATE_SCHEME:-http}
+      - NSQ_LOOKUPD=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
+      - NSQD_HOST=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
+      - MIGRATION_PATH=${MIGRATION_PATH:-file://migrations}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - RERANK_API_KEY=${RERANK_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

@@ -65,6 +65,25 @@ func New(
 		}
 	}
 
+	// Seed Rerank API Key from Config
+	if cfg.RerankAPIKey != "" {
+		ctx := context.Background()
+		set, err := settingsService.Get(ctx)
+		if err == nil {
+			// Update if empty
+			if set.RerankAPIKey == "" {
+				set.RerankAPIKey = cfg.RerankAPIKey
+				if err := settingsService.Update(ctx, set); err != nil {
+					slog.Warn("failed to seed rerank api key", "error", err)
+				} else {
+					slog.Info("seeded rerank api key from environment")
+				}
+			}
+		} else {
+			slog.Warn("failed to fetch settings for seeding", "error", err)
+		}
+	}
+
 	settingsHandler := settings.NewHandler(settingsService)
 
 	// Feature: Source

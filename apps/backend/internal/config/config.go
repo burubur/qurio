@@ -24,6 +24,7 @@ type Config struct {
 	IngestionConcurrency int `envconfig:"INGESTION_CONCURRENCY" default:"50"`
 	MigrationPath string `envconfig:"MIGRATION_PATH" default:"file://migrations"`
 	GeminiAPIKey string `envconfig:"GEMINI_API_KEY"`
+	RerankAPIKey string `envconfig:"RERANK_API_KEY"`
 }
 
 func Load() (*Config, error) {
