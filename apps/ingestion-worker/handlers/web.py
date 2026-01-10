@@ -90,19 +90,60 @@ async def handle_web_task(url: str, api_key: str = None) -> dict:
     # Use passed api_key or fallback to settings
     token = api_key if api_key else app_settings.gemini_api_key
     
-    llm_config = LLMConfig(
-        provider="gemini/gemini-3-flash-preview", 
-        api_token=token,
-        temperature=1.0
-    )
-
-    llm_filter = LLMContentFilter(
-        llm_config=llm_config,
-        instruction=INSTRUCTION,
-        chunk_token_threshold=8000
-    )
+    # 1. Manifest Detection (llms.txt)
+    results = []
     
-    md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
+    if not url.endswith("llms.txt"):
+        try:
+            parsed = urlparse(url)
+            base_url = f"{parsed.scheme}://{parsed.netloc}"
+            manifest_url = f"{base_url}/llms.txt"
+            
+            # Lightweight check/crawl for manifest
+            manifest_config = CrawlerRunConfig(
+                markdown_generator=DefaultMarkdownGenerator(),
+                cache_mode=CacheMode.ENABLED
+            )
+            
+            async with AsyncWebCrawler(verbose=False) as manifest_crawler:
+                manifest_res = await asyncio.wait_for(
+                    manifest_crawler.arun(url=manifest_url, config=manifest_config),
+                    timeout=10.0 # Short timeout for manifest check
+                )
+                
+                if manifest_res.success and manifest_res.markdown:
+                    logger.info("manifest_found", url=manifest_url)
+                    manifest_meta = extract_web_metadata(manifest_res, manifest_url)
+                    
+                    results.append({
+                        "url": manifest_res.url,
+                        "title": manifest_meta['title'] or "llms.txt",
+                        "path": manifest_meta['path'],
+                        "content": manifest_res.markdown,
+                        "links": manifest_meta['links']
+                    })
+        except Exception as e:
+            # Silent failure for manifest detection is acceptable
+            logger.debug("manifest_check_failed", error=str(e))
+
+    # 2. Configure Generator (Bypass LLM for .txt/llms.txt)
+    if url.endswith(".txt") or url.endswith("llms.txt"):
+        md_generator = DefaultMarkdownGenerator()
+        logger.info("llm_bypass_enabled", url=url, reason="text_file")
+    else:
+        llm_config = LLMConfig(
+            provider="gemini/gemini-3-flash-preview", 
+            api_token=token,
+            temperature=1.0
+        )
+
+        llm_filter = LLMContentFilter(
+            llm_config=llm_config,
+            instruction=INSTRUCTION,
+            chunk_token_threshold=8000
+        )
+        
+        md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
 
     config = CrawlerRunConfig(
         cache_mode=CacheMode.ENABLED,
@@ -131,13 +172,15 @@ async def handle_web_task(url: str, api_key: str = None) -> dict:
 
             logger.info("crawl_completed", url=url, links_found=len(meta['links']), title=meta['title'], path=meta['path'])
 
-            return [{
+            results.append({
                 "url": result.url,
                 "title": meta['title'],
                 "path": meta['path'],
                 "content": result.markdown,
                 "links": meta['links']
-            }]
+            })
+            
+            return results
 
     except asyncio.TimeoutError:
         logger.error("crawl_timeout", url=url)

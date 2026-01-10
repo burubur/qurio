@@ -1,4 +1,4 @@
-
-## Refactoring & Verification (2026-01-08 Part 2)
-- **Frontend Config**: Attempted to consolidate path aliases using `vite-tsconfig-paths`. Due to plugin resolution issues with the current `tsconfig.app.json` structure, reverted to manual `resolve.alias` in `vite.config.ts` to ensure build stability. Verified `npm run build` succeeds.
-- **Worker Verification**: Added `apps/ingestion-worker/tests/test_logging_integration.py` to rigorously verify that `tornado`, `nsq`, and `root` loggers emit valid JSON. Confirmed 100% JSON output compliance in production mode.
+The `llms.txt` ingestion implementation was refined on 2026-01-10 to separate manifest results from the main crawl.
+- **Worker Change**: `handle_web_task` now returns a *list* of results. If `llms.txt` is found, it is returned as a distinct result object *before* or *after* the main page result, rather than merging its links into the main page's result.
+- **Reasoning**: This separation ensures the Backend processes `llms.txt` as a distinct entity with its own URL (`.../llms.txt`).
+- **Backend Benefit**: The Backend's "Virtual Depth" logic (added previously) triggers specifically when the URL ends in `llms.txt`. By returning it as a separate result, we guarantee the backend sees `url=.../llms.txt` and effectively increments the crawl depth for its links, solving the auto-discovery issue where manifest links were ignored at `maxDepth`.

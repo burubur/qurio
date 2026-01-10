@@ -228,8 +228,17 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 		{
 			u, _ := url.Parse(payload.URL)
 			host := u.Host
+			
+			// Virtual Depth for llms.txt: Treat it as having +1 depth allowance
+			effectiveMaxDepth := maxDepth
+			isManifest := false
+			if len(payload.URL) > 8 && payload.URL[len(payload.URL)-8:] == "llms.txt" {
+				effectiveMaxDepth = maxDepth + 1
+				isManifest = true
+				slog.InfoContext(ctx, "processing manifest links with extended depth", "url", payload.URL)
+			}
 
-			newPages := DiscoverLinks(payload.SourceID, host, payload.Links, payload.Depth, maxDepth, exclusions)
+			newPages := DiscoverLinks(payload.SourceID, host, payload.Links, payload.Depth, effectiveMaxDepth, exclusions)
 			
 			if len(newPages) > 0 {
 				newURLs, err := h.pageManager.BulkCreatePages(ctx, newPages)
@@ -238,6 +247,12 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 				} else {
 					slog.InfoContext(ctx, "discovered new pages", "count", len(newURLs))
 					for _, newURL := range newURLs {
+						// Ensure tasks generated from llms.txt at maxDepth don't exceed maxDepth+1 endlessly
+						// Actually, DiscoverLinks sets new page depth as parent.Depth + 1.
+						// If parent is llms.txt (depth=maxDepth), child will be maxDepth+1.
+						// The child won't discover further links because its depth > maxDepth.
+						// This is exactly what we want (1 level deeper than max).
+						
 						taskPayload, _ := json.Marshal(map[string]interface{}{
 							"type":           "web",
 							"url":            newURL,
@@ -254,6 +269,8 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 						}
 					}
 				}
+			} else if isManifest {
+				slog.InfoContext(ctx, "no new pages discovered from manifest (might be duplicates or excluded)", "url", payload.URL)
 			}
 		}
 	}
