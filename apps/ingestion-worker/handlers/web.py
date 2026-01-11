@@ -81,7 +81,10 @@ def extract_web_metadata(result, url: str) -> dict:
         "links": internal_links
     }
 
-async def handle_web_task(url: str, api_key: str = None) -> dict:
+def default_crawler_factory(config=None, **kwargs):
+    return AsyncWebCrawler(config=config, **kwargs)
+
+async def handle_web_task(url: str, api_key: str = None, crawler_factory=default_crawler_factory) -> list[dict]:
     """
     Crawls a single page and returns content and discovered internal links.
     """
@@ -105,7 +108,7 @@ async def handle_web_task(url: str, api_key: str = None) -> dict:
                 cache_mode=CacheMode.ENABLED
             )
             
-            async with AsyncWebCrawler(verbose=False) as manifest_crawler:
+            async with crawler_factory(verbose=False) as manifest_crawler:
                 manifest_res = await asyncio.wait_for(
                     manifest_crawler.arun(url=manifest_url, config=manifest_config),
                     timeout=10.0 # Short timeout for manifest check
@@ -157,7 +160,7 @@ async def handle_web_task(url: str, api_key: str = None) -> dict:
     
     # Initialize crawler
     try:
-        async with AsyncWebCrawler(verbose=True) as crawler:
+        async with crawler_factory(verbose=True) as crawler:
             # Single page crawl
             result = await asyncio.wait_for(
                 crawler.arun(url=url, config=config),

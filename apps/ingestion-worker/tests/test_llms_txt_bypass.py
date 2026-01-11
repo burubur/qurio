@@ -1,114 +1,104 @@
 import sys
-from unittest.mock import MagicMock
-import types
-
-# Create a mock package for crawl4ai if not already present
-if "crawl4ai" not in sys.modules:
-    crawl4ai = types.ModuleType("crawl4ai")
-    sys.modules["crawl4ai"] = crawl4ai
-
-    # Mock submodules
-    content_filter_strategy = types.ModuleType("crawl4ai.content_filter_strategy")
-    sys.modules["crawl4ai.content_filter_strategy"] = content_filter_strategy
-    crawl4ai.content_filter_strategy = content_filter_strategy
-
-    markdown_generation_strategy = types.ModuleType("crawl4ai.markdown_generation_strategy")
-    sys.modules["crawl4ai.markdown_generation_strategy"] = markdown_generation_strategy
-    crawl4ai.markdown_generation_strategy = markdown_generation_strategy
-
-    # Populate with mocks
-    crawl4ai.AsyncWebCrawler = MagicMock()
-    crawl4ai.CrawlerRunConfig = MagicMock()
-    crawl4ai.CacheMode = MagicMock()
-    crawl4ai.LLMConfig = MagicMock()
-
-    content_filter_strategy.PruningContentFilter = MagicMock()
-    content_filter_strategy.LLMContentFilter = MagicMock()
-
-    markdown_generation_strategy.DefaultMarkdownGenerator = MagicMock()
-
+from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
-import asyncio
-from handlers.web import handle_web_task
+
+@pytest.fixture
+def mock_crawl4ai_env():
+    # Setup mocks for crawl4ai
+    mock_crawl4ai = MagicMock()
+    sys.modules["crawl4ai"] = mock_crawl4ai
+    sys.modules["crawl4ai.content_filter_strategy"] = MagicMock()
+    sys.modules["crawl4ai.markdown_generation_strategy"] = MagicMock()
+    
+    # Force reload of handlers.web to pick up these mocks
+    if 'handlers.web' in sys.modules:
+        del sys.modules['handlers.web']
+    import handlers.web
+    
+    yield handlers.web
+    
+    # Cleanup
+    if 'handlers.web' in sys.modules:
+        del sys.modules['handlers.web']
 
 @pytest.mark.asyncio
-async def test_llms_txt_uses_default_generator():
-    # Arrange
+async def test_llms_txt_uses_default_generator(mock_crawl4ai_env):
+    handlers_web = mock_crawl4ai_env
+    handle_web_task = handlers_web.handle_web_task
+    
     url = "https://example.com/llms.txt"
-    
     mock_result = MagicMock()
     mock_result.success = True
-    mock_result.markdown = "[link](http://test.com)"
+    mock_result.markdown = "content"
     mock_result.url = url
     mock_result.links = {'internal': []}
-    
+
     mock_crawler = MagicMock()
-    f = asyncio.Future()
-    f.set_result(mock_result)
-    mock_crawler.arun.return_value = f
-    
+    async def fake_arun(url, config=None):
+        return mock_result
+    mock_crawler.arun.side_effect = fake_arun
+        
     mock_crawler_cm = AsyncMock()
     mock_crawler_cm.__aenter__.return_value = mock_crawler
     mock_crawler_cm.__aexit__.return_value = None
     
-    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
-        from crawl4ai import DefaultMarkdownGenerator
+    mock_factory = MagicMock(return_value=mock_crawler_cm)
+    
+    # Patch DefaultMarkdownGenerator IN the reloaded module
+    with patch.object(handlers_web, 'DefaultMarkdownGenerator') as MockGen:
+        generator_instance = MagicMock(name="generator_instance")
+        MockGen.return_value = generator_instance
         
-        # Act
-        await handle_web_task(url)
+        await handle_web_task(url, crawler_factory=mock_factory)
         
-        # Assert
-        call_args = mock_crawler.arun.call_args
-        assert call_args is not None
-        config = call_args.kwargs.get('config')
+        # Verify via CrawlerRunConfig calls
+        MockCrawlerRunConfig = sys.modules['crawl4ai'].CrawlerRunConfig
         
-        # We check if DefaultMarkdownGenerator was instantiated and passed
-        # Since we mocked it, we can check if the mock was used
-        assert isinstance(config.markdown_generator, DefaultMarkdownGenerator)
+        calls = MockCrawlerRunConfig.call_args_list
+        found = False
+        for call in calls:
+            if call.kwargs.get('markdown_generator') == generator_instance:
+                found = True
+                break
+        assert found, "CrawlerRunConfig should be initialized with DefaultMarkdownGenerator instance"
 
 @pytest.mark.asyncio
-async def test_standard_page_uses_llm_filter():
-    # Arrange
-    url = "https://example.com/page"
+async def test_standard_page_uses_llm_filter(mock_crawl4ai_env):
+    handlers_web = mock_crawl4ai_env
+    handle_web_task = handlers_web.handle_web_task
     
+    url = "https://example.com/page"
     mock_result = MagicMock()
     mock_result.success = True
-    mock_result.markdown = "Content"
+    mock_result.markdown = "content"
     mock_result.url = url
     mock_result.links = {'internal': []}
-    
+
     mock_crawler = MagicMock()
-    f = asyncio.Future()
-    f.set_result(mock_result)
-    mock_crawler.arun.return_value = f
+    async def fake_arun(url, config=None):
+        if "llms.txt" in url:
+             m_res = MagicMock()
+             m_res.success = False
+             return m_res
+        return mock_result
+
+    mock_crawler.arun.side_effect = fake_arun
     
     mock_crawler_cm = AsyncMock()
     mock_crawler_cm.__aenter__.return_value = mock_crawler
     mock_crawler_cm.__aexit__.return_value = None
     
-    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
-        from crawl4ai import LLMContentFilter
+    mock_factory = MagicMock(return_value=mock_crawler_cm)
+    
+    with patch.object(handlers_web, 'DefaultMarkdownGenerator') as MockGen:
+        await handle_web_task(url, crawler_factory=mock_factory)
         
-        # Act
-        await handle_web_task(url)
+        calls = MockGen.call_args_list
+        assert len(calls) > 0
         
-        # Assert
-        call_args = mock_crawler.arun.call_args
-        config = call_args.kwargs.get('config')
-        
-        # Currently the code wraps LLMContentFilter in DefaultMarkdownGenerator
-        # so we need to check how it's constructed in the implementation
-        # The implementation does: md_generator = DefaultMarkdownGenerator(content_filter=llm_filter)
-        # So for standard page, it should be DefaultMarkdownGenerator with a content_filter
-        
-        assert isinstance(config.markdown_generator, MagicMock) # DefaultMarkdownGenerator mock
-        
-        # We need to verify if LLMContentFilter was used in its construction
-        # But since we mock everything, it's a bit tricky to distinguish without implementation details
-        # However, for the bypass (test above), we expect DefaultMarkdownGenerator() WITHOUT content_filter
-        # or with a different one. 
-        
-        # Let's check LLMContentFilter instantiation
-        # In standard flow, LLMContentFilter is instantiated
-        # In bypass flow, it should NOT be (or at least not passed to generator)
+        has_filter = False
+        for call in calls:
+            if 'content_filter' in call.kwargs:
+                has_filter = True
+                break
+        assert has_filter, "DefaultMarkdownGenerator should be called with content_filter for standard pages"

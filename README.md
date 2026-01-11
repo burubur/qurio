@@ -71,7 +71,7 @@ Qurio is built as a set of microservices orchestrated by Docker Compose:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/yourusername/qurio.git
+    git clone https://github.com/irahardianto/qurio.git
     cd qurio
     ```
 

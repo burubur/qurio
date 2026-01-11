@@ -27,76 +27,83 @@ content_filter_strategy.LLMContentFilter = MagicMock()
 markdown_generation_strategy.DefaultMarkdownGenerator = MagicMock()
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
+from unittest.mock import MagicMock, AsyncMock, ANY, patch
 import asyncio
 
 # Ensure we get the real module, not a mock from test_main_integration
 if 'handlers.web' in sys.modules:
     del sys.modules['handlers.web']
 
-from handlers.web import handle_web_task
-
 @pytest.mark.asyncio
 async def test_handle_web_task_returns_title():
-    # Mock result
-    mock_result = MagicMock()
-    mock_result.success = True
-    mock_result.markdown = "# My Page Title\nSome content"
-    mock_result.url = "http://example.com"
-    mock_result.links = {'internal': []}
-    
+    from handlers.web import handle_web_task
     # Mock crawler
     mock_crawler = MagicMock()
-    f = asyncio.Future()
-    f.set_result(mock_result)
-    mock_crawler.arun.return_value = f
+    
+    async def side_effect(url, config=None):
+        res = MagicMock()
+        if url.endswith("llms.txt"):
+            res.success = False # Manifest check fails
+        else:
+            res.success = True
+            res.markdown = "# My Page Title\nSome content"
+            res.url = "http://example.com"
+            res.links = {'internal': []}
+        return res
+
+    mock_crawler.arun.side_effect = side_effect
     
     # Context manager mock
     mock_crawler_cm = AsyncMock()
     mock_crawler_cm.__aenter__.return_value = mock_crawler
     mock_crawler_cm.__aexit__.return_value = None
     
-    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
-        result = await handle_web_task("http://example.com")
-        
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert "title" in result[0]
-        # Since we use a fallback regex in our plan, we expect it to match the header
-        assert result[0]["title"] == "My Page Title"
+    mock_factory = MagicMock(return_value=mock_crawler_cm)
+    
+    result = await handle_web_task("http://example.com", crawler_factory=mock_factory)
+    
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert "title" in result[0]
+    assert result[0]["title"] == "My Page Title"
 
 @pytest.mark.asyncio
 async def test_handle_web_task_success():
-    # Mock result
-    mock_result = MagicMock()
-    mock_result.success = True
-    mock_result.markdown = "# Test Content"
-    mock_result.url = "http://example.com"
-    mock_result.links = {'internal': []}
-    
+    from handlers.web import handle_web_task
     # Mock crawler
     mock_crawler = MagicMock()
-    f = asyncio.Future()
-    f.set_result(mock_result)
-    mock_crawler.arun.return_value = f
+
+    async def side_effect(url, config=None):
+        res = MagicMock()
+        if url.endswith("llms.txt"):
+            res.success = False
+        else:
+            res.success = True
+            res.markdown = "# Test Content"
+            res.url = "http://example.com"
+            res.links = {'internal': []}
+        return res
+
+    mock_crawler.arun.side_effect = side_effect
     
     # Context manager mock
     mock_crawler_cm = AsyncMock()
     mock_crawler_cm.__aenter__.return_value = mock_crawler
     mock_crawler_cm.__aexit__.return_value = None
     
-    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
-        result = await handle_web_task("http://example.com")
-        
-        # This assertion verifies the fix (it currently fails if returning dict)
-        assert isinstance(result, list), "Expected list, got something else"
-        assert len(result) == 1
-        assert result[0]["content"] == "# Test Content"
-        assert result[0]["url"] == "http://example.com"
-        mock_crawler.arun.assert_called_with(url="http://example.com", config=ANY)
+    mock_factory = MagicMock(return_value=mock_crawler_cm)
+    
+    result = await handle_web_task("http://example.com", crawler_factory=mock_factory)
+    
+    assert isinstance(result, list), "Expected list, got something else"
+    assert len(result) == 1
+    assert result[0]["content"] == "# Test Content"
+    assert result[0]["url"] == "http://example.com"
+    mock_crawler.arun.assert_called_with(url="http://example.com", config=ANY)
 
 @pytest.mark.asyncio
 async def test_handle_web_task_failure():
+    from handlers.web import handle_web_task
     # Mock result
     mock_result = MagicMock()
     mock_result.success = False
@@ -113,12 +120,14 @@ async def test_handle_web_task_failure():
     mock_crawler_cm.__aenter__.return_value = mock_crawler
     mock_crawler_cm.__aexit__.return_value = None
     
-    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm) as MockCrawler:
-        with pytest.raises(Exception, match="Crawl failed: Failed"):
-            await handle_web_task("http://example.com")
+    mock_factory = MagicMock(return_value=mock_crawler_cm)
+    
+    with pytest.raises(Exception, match="Crawl failed: Failed"):
+        await handle_web_task("http://example.com", crawler_factory=mock_factory)
 
 @pytest.mark.asyncio
 async def test_handle_web_task_internal_links():
+    from handlers.web import handle_web_task
     # Mock result with mixed links
     mock_result = MagicMock()
     mock_result.success = True
@@ -142,15 +151,17 @@ async def test_handle_web_task_internal_links():
     mock_crawler_cm.__aenter__.return_value = mock_crawler
     mock_crawler_cm.__aexit__.return_value = None
     
-    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm):
-        result = await handle_web_task("http://example.com/page1")
-        
-        links = result[0]["links"]
-        assert "http://example.com/page2" in links
-        assert "http://google.com" not in links
+    mock_factory = MagicMock(return_value=mock_crawler_cm)
+    
+    result = await handle_web_task("http://example.com/page1", crawler_factory=mock_factory)
+    
+    links = result[0]["links"]
+    assert "http://example.com/page2" in links
+    assert "http://google.com" not in links
 
 @pytest.mark.asyncio
 async def test_handle_web_task_auth_precedence():
+    from handlers.web import handle_web_task
     mock_result = MagicMock()
     mock_result.success = True
     mock_result.markdown = ""
@@ -166,14 +177,15 @@ async def test_handle_web_task_auth_precedence():
     mock_crawler_cm.__aenter__.return_value = mock_crawler
     mock_crawler_cm.__aexit__.return_value = None
 
-    with patch('handlers.web.AsyncWebCrawler', return_value=mock_crawler_cm):
-        with patch('handlers.web.LLMConfig') as MockLLMConfig:
-             await handle_web_task("http://example.com", api_key="custom-key")
-             
-             # Verify LLMConfig initialized with custom key
-             MockLLMConfig.assert_called_with(
-                provider="gemini/gemini-3-flash-preview",
-                api_token="custom-key",
-                temperature=1.0
-             )
+    mock_factory = MagicMock(return_value=mock_crawler_cm)
 
+    import handlers.web
+    with patch('handlers.web.LLMConfig') as MockLLMConfig:
+         await handle_web_task("http://example.com", api_key="custom-key", crawler_factory=mock_factory)
+         
+         # Verify LLMConfig initialized with custom key
+         MockLLMConfig.assert_called_with(
+            provider="gemini/gemini-3-flash-preview",
+            api_token="custom-key",
+            temperature=1.0
+         )
