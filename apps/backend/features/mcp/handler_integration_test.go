@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -185,42 +186,53 @@ func TestHandler_SSE_Correlation(t *testing.T) {
 	sourceRepo := source.NewPostgresRepo(s.DB)
 	handler := mcp.NewHandler(retrievalSvc, sourceRepo)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Create test server to avoid Race Condition with ResponseRecorder
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp/sse", handler.HandleSSE)
+	mux.HandleFunc("/mcp/messages", handler.HandleMessage)
+	
+	// Wrap with middleware
+	server := httptest.NewServer(middleware.CorrelationID(mux))
+	defer server.Close()
 
 	// 1. Establish SSE Connection
-	reqSSE := httptest.NewRequest("GET", "/mcp/sse", nil).WithContext(ctx)
-	wSSE := httptest.NewRecorder()
+	resp, err := http.Get(server.URL + "/mcp/sse")
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	done := make(chan bool)
-	go func() {
-		handler.HandleSSE(wSSE, reqSSE)
-		done <- true
-	}()
-
-	// 2. Read Session ID
+	// 2. Read Session ID from stream
 	var sessionID string
+	buffer := make([]byte, 1024)
 	timeout := time.After(2 * time.Second)
-	found := false
-	for !found {
-		select {
-		case <-timeout:
-			t.Fatal("Timeout waiting for SSE session ID")
-		default:
-			body := wSSE.Body.String()
-			if strings.Contains(body, "event: id") {
-				parts := strings.Split(body, "event: id\ndata: ")
+	done := make(chan bool)
+
+	go func() {
+		for {
+			n, err := resp.Body.Read(buffer)
+			if err != nil {
+				break
+			}
+			chunk := string(buffer[:n])
+			if strings.Contains(chunk, "event: id") {
+				parts := strings.Split(chunk, "event: id\ndata: ")
 				if len(parts) > 1 {
 					rest := parts[1]
 					idPart := strings.Split(rest, "\n")[0]
 					sessionID = strings.TrimSpace(idPart)
 					if sessionID != "" {
-						found = true
+						done <- true
+						return
 					}
 				}
 			}
-			time.Sleep(100 * time.Millisecond)
 		}
+	}()
+
+	select {
+	case <-timeout:
+		t.Fatal("Timeout waiting for SSE session ID")
+	case <-done:
+		// success
 	}
 	
 	assert.NotEmpty(t, sessionID)
@@ -228,20 +240,20 @@ func TestHandler_SSE_Correlation(t *testing.T) {
 	// 3. Send Message with Correlation ID (Verify synchronous error response includes it)
 	correlationID := "test-correlation-id-123"
 	
-	reqErr := httptest.NewRequest("POST", "/mcp/messages?sessionId="+sessionID, strings.NewReader("invalid-json"))
-	// Inject correlation ID simulating middleware
-	reqErr = reqErr.WithContext(middleware.WithCorrelationID(context.Background(), correlationID))
-	wErr := httptest.NewRecorder()
+	client := &http.Client{}
+	reqErr, _ := http.NewRequest("POST", server.URL+"/mcp/messages?sessionId="+sessionID, strings.NewReader("invalid-json"))
+	reqErr.Header.Set("X-Correlation-ID", correlationID)
+
+	respErr, err := client.Do(reqErr)
+	require.NoError(t, err)
+	defer respErr.Body.Close()
 	
-	handler.HandleMessage(wErr, reqErr)
-	
-	assert.Equal(t, http.StatusBadRequest, wErr.Code)
+	assert.Equal(t, http.StatusBadRequest, respErr.StatusCode)
 	var errResp map[string]interface{}
-	err := json.Unmarshal(wErr.Body.Bytes(), &errResp)
+	
+	bodyBytes, _ := io.ReadAll(respErr.Body)
+	err = json.Unmarshal(bodyBytes, &errResp)
 	require.NoError(t, err)
 	
 	assert.Equal(t, correlationID, errResp["correlationId"])
-	
-	cancel() // Stop SSE
-	<-done
 }
