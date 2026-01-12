@@ -12,6 +12,7 @@ import (
 	"qurio/apps/backend/internal/worker"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/middleware"
+	"qurio/apps/backend/internal/config"
 )
 
 type Source struct {
@@ -148,10 +149,16 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 		"gemini_api_key": apiKey,
 		"correlation_id": middleware.GetCorrelationID(ctx),
 	})
-	if err := s.pub.Publish("ingest.task", payload); err != nil {
-		slog.Error("failed to publish ingest.task event", "error", err)
+
+	topic := config.TopicIngestWeb
+	if src.Type == "file" {
+		topic = config.TopicIngestFile
+	}
+
+	if err := s.pub.Publish(topic, payload); err != nil {
+		slog.Error("failed to publish ingest task", "error", err, "topic", topic)
 	} else {
-		slog.Info("published ingest.task event", "url", src.URL, "id", src.ID)
+		slog.Info("published ingest task", "url", src.URL, "id", src.ID, "topic", topic)
 	}
 	
 	return nil
@@ -185,10 +192,10 @@ func (s *Service) Upload(ctx context.Context, path string, hash string) (*Source
 		"id":             src.ID,
 		"correlation_id": middleware.GetCorrelationID(ctx),
 	})
-	if err := s.pub.Publish("ingest.task", payload); err != nil {
-		slog.Error("failed to publish ingest.task event (upload)", "error", err)
+	if err := s.pub.Publish(config.TopicIngestFile, payload); err != nil {
+		slog.Error("failed to publish ingest task (upload)", "error", err, "topic", config.TopicIngestFile)
 	} else {
-		slog.Info("published ingest.task event (upload)", "path", path, "id", src.ID)
+		slog.Info("published ingest task (upload)", "path", path, "id", src.ID, "topic", config.TopicIngestFile)
 	}
 
 	return src, nil
@@ -298,8 +305,14 @@ func (s *Service) ReSync(ctx context.Context, id string) error {
 	}
 
 	payload, _ := json.Marshal(payloadMap)
-	if err := s.pub.Publish("ingest.task", payload); err != nil {
-		slog.Error("failed to publish resync event", "error", err)
+
+	topic := config.TopicIngestWeb
+	if src.Type == "file" {
+		topic = config.TopicIngestFile
+	}
+
+	if err := s.pub.Publish(topic, payload); err != nil {
+		slog.Error("failed to publish resync event", "error", err, "topic", topic)
 		return err
 	}
 	return nil

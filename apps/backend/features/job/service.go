@@ -2,9 +2,12 @@ package job
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
+
+	"qurio/apps/backend/internal/config"
 )
 
 type EventPublisher interface {
@@ -35,10 +38,22 @@ func (s *Service) Retry(ctx context.Context, id string) error {
 		return err
 	}
 
+	// Determine topic from payload
+	var payloadMap map[string]interface{}
+	if err := json.Unmarshal(job.Payload, &payloadMap); err != nil {
+		s.logger.Error("failed to unmarshal job payload for retry", "error", err)
+		return err
+	}
+
+	topic := config.TopicIngestWeb
+	if t, ok := payloadMap["type"].(string); ok && t == "file" {
+		topic = config.TopicIngestFile
+	}
+
 	// 2. Publish to NSQ with timeout
 	done := make(chan error, 1)
 	go func() {
-		done <- s.pub.Publish("ingest.task", job.Payload)
+		done <- s.pub.Publish(topic, job.Payload)
 	}()
 
 	select {

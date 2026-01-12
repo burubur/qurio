@@ -14,6 +14,7 @@ import (
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/text"
+	"qurio/apps/backend/internal/config"
 )
 
 type PageDTO struct {
@@ -263,7 +264,7 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 							"gemini_api_key": apiKey,
 							"correlation_id": correlationID,
 						})
-							if err := h.publisher.Publish("ingest.task", taskPayload); err != nil {
+						if err := h.publisher.Publish(config.TopicIngestWeb, taskPayload); err != nil {
 							slog.ErrorContext(ctx, "failed to publish task, marking page as failed", "error", err, "url", newURL)
 							_ = h.pageManager.UpdatePageStatus(ctx, payload.SourceID, newURL, "failed", fmt.Sprintf("Failed to publish task: %v", err))
 						}

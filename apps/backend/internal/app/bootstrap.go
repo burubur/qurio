@@ -80,6 +80,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 
 	// NSQ Producer
 	nsqCfg := nsq.NewConfig()
+	// nsqCfg.MaxMsgSize = cfg.NSQMaxMsgSize // Field undefined in go-nsq v1.1.0
 	producer, err := nsq.NewProducer(cfg.NSQDHost, nsqCfg)
 	if err != nil {
 		return nil, fmt.Errorf("nsq producer error: %w", err)
@@ -96,19 +97,21 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 }
 
 func createTopics(nsqdHost string) {
-    nsqHttpURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.task", "nsqd")
-	nsqResultURL := fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.result", "nsqd")
-	
 	host, _, _ := net.SplitHostPort(nsqdHost)
-	if host != "" {
-		nsqHttpURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.task", host)
-		nsqResultURL = fmt.Sprintf("http://%s:4151/topic/create?topic=ingest.result", host)
+	if host == "" {
+		host = "nsqd"
 	}
-	
+
+	create := func(topic string) {
+		url := fmt.Sprintf("http://%s:4151/topic/create?topic=%s", host, topic)
+		http.Post(url, "application/json", nil)
+	}
+
 	go func() {
 		time.Sleep(2 * time.Second)
-		http.Post(nsqHttpURL, "application/json", nil)
-		http.Post(nsqResultURL, "application/json", nil)
+		create(config.TopicIngestWeb)
+		create(config.TopicIngestFile)
+		create(config.TopicIngestResult)
 	}()
 }
 

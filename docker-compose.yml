@@ -39,7 +39,7 @@ services:
     image: nsqio/nsq:v1.3.0
     # Use wget instead of curl in the healthcheck as the image might not have curl
     # The image is nsqio/nsq based on Alpine, it usually has wget
-    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --broadcast-address=nsqd
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --broadcast-address=nsqd --max-msg-size=${NSQ_MAX_MSG_SIZE:-10485760}
     depends_on: [nsqlookupd]
     ports:
       - "4150:4150"
@@ -50,13 +50,35 @@ services:
       timeout: 5s
       retries: 5
 
-  ingestion-worker:
+  ingestion-worker-web:
     build: ./apps/ingestion-worker
     depends_on:
       nsqd:
         condition: service_healthy
     environment:
       # Use DOCKER_ prefix to avoid collision with local .env variables
+      - NSQ_TOPIC_INGEST=ingest.task.web
+      - NSQ_LOOKUPD_HTTP=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
+      - NSQD_TCP_ADDRESS=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
+      - NSQ_MAX_IN_FLIGHT=${NSQ_MAX_IN_FLIGHT:-8}
+      - INGESTION_CONCURRENCY=${INGESTION_CONCURRENCY:-50}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 8G
+    volumes:
+      - qurio_uploads:/var/lib/qurio/uploads
+
+  ingestion-worker-file:
+    build: ./apps/ingestion-worker
+    depends_on:
+      nsqd:
+        condition: service_healthy
+    environment:
+      # Use DOCKER_ prefix to avoid collision with local .env variables
+      - NSQ_TOPIC_INGEST=ingest.task.file
       - NSQ_LOOKUPD_HTTP=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
       - NSQD_TCP_ADDRESS=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
       - NSQ_MAX_IN_FLIGHT=${NSQ_MAX_IN_FLIGHT:-8}
@@ -85,6 +107,7 @@ services:
       - WEAVIATE_SCHEME=${WEAVIATE_SCHEME:-http}
       - NSQ_LOOKUPD=${DOCKER_NSQ_LOOKUPD_HTTP_ADDRESS:-nsqlookupd:4161}
       - NSQD_HOST=${DOCKER_NSQD_TCP_ADDRESS:-nsqd:4150}
+      - NSQ_MAX_MSG_SIZE=${NSQ_MAX_MSG_SIZE:-10485760}
       - MIGRATION_PATH=${MIGRATION_PATH:-file://migrations}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - RERANK_API_KEY=${RERANK_API_KEY}

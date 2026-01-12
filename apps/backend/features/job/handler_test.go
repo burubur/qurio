@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/features/job"
+	"qurio/apps/backend/internal/config"
 )
 
 // MockRepo implements job.Repository
@@ -98,7 +99,7 @@ func TestHandler_Retry(t *testing.T) {
 	}
 
 	mockRepo.On("Get", mock.Anything, jobID).Return(j, nil)
-	mockPub.On("Publish", "ingest.task", mock.Anything).Return(nil)
+	mockPub.On("Publish", config.TopicIngestWeb, mock.Anything).Return(nil)
 	mockRepo.On("Delete", mock.Anything, jobID).Return(nil)
 
 	req := httptest.NewRequest("POST", "/jobs/"+jobID+"/retry", nil)

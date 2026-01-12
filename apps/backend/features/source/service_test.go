@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
+	"qurio/apps/backend/internal/config"
 )
 
 // --- Mocks ---
@@ -164,7 +165,7 @@ func TestService_Create_Success(t *testing.T) {
 	mockSettings.On("Get", mock.Anything).Return(&settings.Settings{GeminiAPIKey: "key"}, nil)
 
 	// 5. Publish
-	mockPub.On("Publish", "ingest.task", mock.Anything).Return(nil)
+	mockPub.On("Publish", config.TopicIngestWeb, mock.Anything).Return(nil)
 
 	err := svc.Create(context.Background(), src)
 	assert.NoError(t, err)
@@ -229,7 +230,7 @@ func TestService_ReSync(t *testing.T) {
 	mockSettings.On("Get", mock.Anything).Return(nil, errors.New("no settings")) // Fallback to empty key
 
 	// 6. Publish
-	mockPub.On("Publish", "ingest.task", mock.MatchedBy(func(body []byte) bool {
+	mockPub.On("Publish", config.TopicIngestWeb, mock.MatchedBy(func(body []byte) bool {
 		var m map[string]interface{}
 		json.Unmarshal(body, &m)
 		return m["resync"] == true

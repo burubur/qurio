@@ -25,6 +25,7 @@ type Config struct {
 	MigrationPath string `envconfig:"MIGRATION_PATH" default:"file://migrations"`
 	GeminiAPIKey string `envconfig:"GEMINI_API_KEY"`
 	RerankAPIKey string `envconfig:"RERANK_API_KEY"`
+	NSQMaxMsgSize int64 `envconfig:"NSQ_MAX_MSG_SIZE" default:"10485760"` // 10MB
 }
 
 func Load() (*Config, error) {

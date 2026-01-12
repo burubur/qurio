@@ -109,7 +109,7 @@ func (s *IntegrationSuite) Setup() {
 	nsqReq := testcontainers.ContainerRequest{
 		Image:        "nsqio/nsq:v1.3.0",
 		ExposedPorts: []string{"4150/tcp", "4151/tcp"},
-		Cmd:          []string{"/nsqd", "--broadcast-address=localhost"}, // Simplified for test
+		Cmd:          []string{"/nsqd", "--broadcast-address=localhost", "--max-msg-size=10485760"}, // 10MB limit
 		WaitingFor:   wait.ForLog("TCP: listening on").WithStartupTimeout(60 * time.Second),
 	}
 	nsqC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{

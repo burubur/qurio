@@ -6,14 +6,18 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"qurio/apps/backend/internal/config"
 )
 
 // MockPublisher for Service Test
 type MockPublisher struct {
-	sleep time.Duration
+	sleep     time.Duration
+	LastTopic string
 }
 
 func (m *MockPublisher) Publish(topic string, body []byte) error {
+	m.LastTopic = topic
 	time.Sleep(m.sleep)
 	return nil
 }
@@ -82,5 +86,40 @@ func TestService_ResetStuckJobs(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("Expected count 0, got %d", count)
+	}
+}
+
+type MockJobRepoForTopic struct {
+	Repository
+	Payload []byte
+}
+
+func (m *MockJobRepoForTopic) Get(ctx context.Context, id string) (*Job, error) {
+	return &Job{ID: id, Payload: m.Payload}, nil
+}
+func (m *MockJobRepoForTopic) Delete(ctx context.Context, id string) error { return nil }
+func (m *MockJobRepoForTopic) List(ctx context.Context) ([]Job, error) { return nil, nil }
+func (m *MockJobRepoForTopic) Count(ctx context.Context) (int, error) { return 0, nil }
+func (m *MockJobRepoForTopic) Save(ctx context.Context, job *Job) error { return nil }
+
+func TestRetry_TopicSelection(t *testing.T) {
+	pub := &MockPublisher{}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	
+	// We need to inject the specific repo behavior.
+	// Since NewService takes Repository interface, we can pass our custom mock.
+	customRepo := &MockJobRepoForTopic{
+		Payload: []byte(`{"type": "file", "path": "/tmp/test.pdf"}`),
+	}
+	
+	service := NewService(customRepo, pub, logger)
+
+	err := service.Retry(context.Background(), "1")
+	if err != nil {
+		t.Fatalf("Retry failed: %v", err)
+	}
+
+	if pub.LastTopic != config.TopicIngestFile {
+		t.Errorf("Expected topic %s, got %s", config.TopicIngestFile, pub.LastTopic)
 	}
 }

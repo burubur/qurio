@@ -9,6 +9,7 @@ import (
 	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
+	"qurio/apps/backend/internal/config"
 )
 
 // Reusing MockRepo from handler_test.go is tricky because they are in the same package (source)
@@ -76,6 +77,10 @@ func TestCreate_PropagatesCorrelationID(t *testing.T) {
 	if id, ok := payload["correlation_id"].(string); !ok || id != expectedID {
 		t.Errorf("Expected correlation_id %s, got %v", expectedID, payload["correlation_id"])
 	}
+
+	if pub.LastTopic != config.TopicIngestWeb {
+		t.Errorf("Expected topic %s, got %s", config.TopicIngestWeb, pub.LastTopic)
+	}
 }
 
 func TestService_ResetStuckPages(t *testing.T) {
@@ -103,5 +108,22 @@ func TestService_Create_InvalidRegex(t *testing.T) {
 	}
 	if err.Error() != "invalid exclusion regex: [" {
 		t.Errorf("Expected 'invalid exclusion regex: [', got '%v'", err)
+	}
+}
+
+func TestCreate_FileSource_PublishesToFileTopic(t *testing.T) {
+	pub := &TestPublisher{}
+	repo := &TestRepo{}
+	svc := NewService(repo, pub, &TestChunkStore{}, &TestSettings{})
+
+	src := &Source{Type: "file", URL: "/tmp/test.pdf"}
+
+	err := svc.Create(context.Background(), src)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if pub.LastTopic != config.TopicIngestFile {
+		t.Errorf("Expected topic %s, got %s", config.TopicIngestFile, pub.LastTopic)
 	}
 }

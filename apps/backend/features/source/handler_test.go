@@ -18,6 +18,7 @@ import (
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/settings"
 	"qurio/apps/backend/internal/worker"
+	"qurio/apps/backend/internal/config"
 )
 
 // MockRepo implements source.Repository
@@ -149,7 +150,7 @@ func TestHandler_Create(t *testing.T) {
 		mockRepo.On("Save", mock.Anything, mock.Anything).Return(nil)
 		mockRepo.On("BulkCreatePages", mock.Anything, mock.Anything).Return([]string{}, nil)
 		mockSettings.On("Get", mock.Anything).Return(&settings.Settings{}, nil)
-		mockPub.On("Publish", "ingest.task", mock.Anything).Return(nil)
+		mockPub.On("Publish", config.TopicIngestWeb, mock.Anything).Return(nil)
 
 		reqBody := `{"type": "web", "url": "http://example.com", "max_depth": 1}`
 		req := httptest.NewRequest("POST", "/sources", strings.NewReader(reqBody))
@@ -237,7 +238,7 @@ func TestHandler_ReSync(t *testing.T) {
 		mockRepo.On("DeletePages", mock.Anything, "1").Return(nil)
 		mockRepo.On("BulkCreatePages", mock.Anything, mock.Anything).Return([]string{}, nil)
 		mockSettings.On("Get", mock.Anything).Return(&settings.Settings{}, nil)
-		mockPub.On("Publish", "ingest.task", mock.Anything).Return(nil)
+		mockPub.On("Publish", config.TopicIngestWeb, mock.Anything).Return(nil)
 
 		req := httptest.NewRequest("POST", "/sources/1/resync", nil)
 		req.SetPathValue("id", "1")
@@ -414,7 +415,7 @@ func TestHandler_Upload_DefaultDirectory(t *testing.T) {
 	mockRepo.On("ExistsByHash", mock.Anything, mock.Anything).Return(false, nil)
 	mockRepo.On("Save", mock.Anything, mock.Anything).Return(nil)
 	// Publisher is called in Service.Upload ("ingest.task")
-	mockPub.On("Publish", "ingest.task", mock.Anything).Return(nil)
+	mockPub.On("Publish", config.TopicIngestFile, mock.Anything).Return(nil)
 
 	// Prepare Request
 	body := &bytes.Buffer{}

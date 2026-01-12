@@ -1,4 +1,2 @@
-The `llms.txt` ingestion implementation was refined on 2026-01-10 to separate manifest results from the main crawl.
-- **Worker Change**: `handle_web_task` now returns a *list* of results. If `llms.txt` is found, it is returned as a distinct result object *before* or *after* the main page result, rather than merging its links into the main page's result.
-- **Reasoning**: This separation ensures the Backend processes `llms.txt` as a distinct entity with its own URL (`.../llms.txt`).
-- **Backend Benefit**: The Backend's "Virtual Depth" logic (added previously) triggers specifically when the URL ends in `llms.txt`. By returning it as a separate result, we guarantee the backend sees `url=.../llms.txt` and effectively increments the crawl depth for its links, solving the auto-discovery issue where manifest links were ignored at `maxDepth`.
+- Added Task 4 and Task 5 to `2026-01-12-parallel-ingestion-1.md` to cover `ResultConsumer` unit tests, backend integration tests, and E2E verification.
+- Confirmed full test coverage for the parallel ingestion feature, including unit, integration, and E2E layers.
