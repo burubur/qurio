@@ -33,7 +33,7 @@ Qurio exposes its knowledge base via the Model Context Protocol (MCP).
 **Arguments:** None.
 
 **Output:**
-- List of sources (ID, Name, Type).
+- List of sources (ID, Name, Type, URL).
 
 ### `qurio_list_pages`
 **Description:** Navigation tool. Lists all individual pages/documents within a specific source.

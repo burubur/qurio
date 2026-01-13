@@ -60,8 +60,10 @@ describe('SourceForm', () => {
     const settingsStore = useSettingsStore()
     settingsStore.geminiApiKey = 'test-key'
     
-    const input = wrapper.find('input[type="text"]')
-    await input.setValue('https://example.com')
+    const nameInput = wrapper.find('input[placeholder="e.g., Company Documentation"]')
+    await nameInput.setValue('https://example.com')
+    const urlInput = wrapper.find('input[placeholder="https://docs.example.com"]')
+    await urlInput.setValue('https://example.com')
 
     // Toggle Advanced
     const toggle = wrapper.find('button[type="button"]') // First button is toggle in this context if we are careful, but tabs are buttons too.
@@ -99,8 +101,10 @@ describe('SourceForm', () => {
     settingsStore.geminiApiKey = 'test-key'
     const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
-    const input = wrapper.find('input[type="text"]')
-    await input.setValue('invalid-url')
+    const nameInput = wrapper.find('input[placeholder="e.g., Company Documentation"]')
+    await nameInput.setValue('Invalid URL Test')
+    const urlInput = wrapper.find('input[placeholder="https://docs.example.com"]')
+    await urlInput.setValue('invalid-url')
 
     await wrapper.find('form').trigger('submit')
 
@@ -123,6 +127,10 @@ describe('SourceForm', () => {
     const buttons = wrapper.findAll('button')
     const fileTab = buttons.find(b => b.text().includes('File Upload'))
     await fileTab?.trigger('click')
+
+    // Set Name
+    const nameInput = wrapper.find('input[placeholder="e.g., Quarterly Report 2024"]')
+    await nameInput.setValue('Test File')
 
     // Trigger file change
     const fileInput = wrapper.find('input[type="file"]')
@@ -179,12 +187,14 @@ describe('SourceForm', () => {
     settingsStore.geminiApiKey = 'test-key'
     store.addSource.mockResolvedValue()
     
-    await wrapper.find('input[type="text"]').setValue('http://example.com')
+    await wrapper.find('input[placeholder="e.g., Company Documentation"]').setValue('Test Source')
+    await wrapper.find('input[placeholder="https://docs.example.com"]').setValue('http://example.com')
     await wrapper.find('form').trigger('submit')
     
     expect(store.addSource).toHaveBeenCalled()
     // Verify input cleared
-    expect(wrapper.find('input[type="text"]').element.value).toBe('')
+    expect(wrapper.find('input[placeholder="e.g., Company Documentation"]').element.value).toBe('')
+    expect(wrapper.find('input[placeholder="https://docs.example.com"]').element.value).toBe('')
   })
 
   it('shows alert dialog when gemini api key is missing on web ingest', async () => {
@@ -200,7 +210,8 @@ describe('SourceForm', () => {
     settingsStore.geminiApiKey = ''
     
     // Set URL
-    await wrapper.find('input[type="text"]').setValue('https://example.com')
+    await wrapper.find('input[placeholder="e.g., Company Documentation"]').setValue('Test Source')
+    await wrapper.find('input[placeholder="https://docs.example.com"]').setValue('https://example.com')
     
     // Click submit
     await wrapper.find('form').trigger('submit')

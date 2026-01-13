@@ -131,12 +131,13 @@ export const useSourceStore = defineStore('sources', () => {
     }
   }
 
-  async function uploadSource(file: File) {
+  async function uploadSource(file: File, name: string) {
     isLoading.value = true
     error.value = null
     try {
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('name', name)
 
       const res = await fetch('/api/sources/upload', {
         method: 'POST',

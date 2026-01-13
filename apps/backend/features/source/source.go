@@ -164,7 +164,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 	return nil
 }
 
-func (s *Service) Upload(ctx context.Context, path string, hash string) (*Source, error) {
+func (s *Service) Upload(ctx context.Context, path string, hash string, name string) (*Source, error) {
 	// Check Duplicate
 	exists, err := s.repo.ExistsByHash(ctx, hash)
 	if err != nil {
@@ -179,6 +179,7 @@ func (s *Service) Upload(ctx context.Context, path string, hash string) (*Source
 		URL:         path, // Use URL field to store file path
 		ContentHash: hash,
 		Status:      "in_progress",
+		Name:        name,
 	}
 
 	if err := s.repo.Save(ctx, src); err != nil {

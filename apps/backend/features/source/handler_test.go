@@ -152,7 +152,7 @@ func TestHandler_Create(t *testing.T) {
 		mockSettings.On("Get", mock.Anything).Return(&settings.Settings{}, nil)
 		mockPub.On("Publish", config.TopicIngestWeb, mock.Anything).Return(nil)
 
-		reqBody := `{"type": "web", "url": "http://example.com", "max_depth": 1}`
+		reqBody := `{"type": "web", "url": "http://example.com", "max_depth": 1, "name": "Test Web"}`
 		req := httptest.NewRequest("POST", "/sources", strings.NewReader(reqBody))
 		w := httptest.NewRecorder()
 
@@ -170,7 +170,7 @@ func TestHandler_Create(t *testing.T) {
 
 		mockRepo.On("ExistsByHash", mock.Anything, mock.Anything).Return(true, nil)
 
-		reqBody := `{"type": "web", "url": "http://dup.com"}`
+		reqBody := `{"type": "web", "url": "http://dup.com", "name": "Duplicate Web"}`
 		req := httptest.NewRequest("POST", "/sources", strings.NewReader(reqBody))
 		w := httptest.NewRecorder()
 
@@ -209,6 +209,7 @@ func TestHandler_Upload(t *testing.T) {
 		writer := multipart.NewWriter(body)
 		part, _ := writer.CreateFormFile("file", "test.exe")
 		part.Write([]byte("binary"))
+		writer.WriteField("name", "Test Name")
 		writer.Close()
 
 		req := httptest.NewRequest("POST", "/sources/upload", body)
@@ -422,6 +423,7 @@ func TestHandler_Upload_DefaultDirectory(t *testing.T) {
 	writer := multipart.NewWriter(body)
 	part, _ := writer.CreateFormFile("file", "default_dir.txt")
 	part.Write([]byte("content"))
+	writer.WriteField("name", "Test File")
 	writer.Close()
 
 	req := httptest.NewRequest("POST", "/sources/upload", body)
@@ -432,7 +434,9 @@ func TestHandler_Upload_DefaultDirectory(t *testing.T) {
 	handler.Upload(w, req)
 
 	// Assertions
-	assert.Equal(t, http.StatusCreated, w.Result().StatusCode)
+	if !assert.Equal(t, http.StatusCreated, w.Result().StatusCode) {
+		t.Logf("Response: %s", w.Body.String())
+	}
 
 	// Verify ./uploads directory was created and contains file
 	entries, err := os.ReadDir("./uploads")

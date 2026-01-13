@@ -368,6 +368,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				ID   string `json:"id"`
 				Name string `json:"name"`
 				Type string `json:"type"`
+				URL  string `json:"url"`
 			}
 			
 			simpleSources := make([]SimpleSource, len(sources))
@@ -380,6 +381,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					ID:   s.ID,
 					Name: name,
 					Type: s.Type,
+					URL:  s.URL,
 				}
 			}
 

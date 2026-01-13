@@ -20,6 +20,7 @@ import {
 const store = useSourceStore()
 const settingsStore = useSettingsStore()
 const router = useRouter()
+const name = ref('')
 const url = ref('')
 const maxDepth = ref(0)
 const exclusions = ref('')
@@ -28,10 +29,13 @@ const activeTab = ref<'web' | 'file'>('web')
 const file = ref<File | null>(null)
 const isDragging = ref(false)
 const showApiKeyAlert = ref(false)
+const validationError = ref<string | null>(null)
 
 const emit = defineEmits(['submit'])
 
 async function submit() {
+  validationError.value = null
+  
   // Check Gemini API Key before proceeding
   if (!settingsStore.geminiApiKey) {
     showApiKeyAlert.value = true
@@ -42,7 +46,14 @@ async function submit() {
   showApiKeyAlert.value = false
 
   if (activeTab.value === 'web') {
-    if (!url.value) return
+    if (!name.value) {
+      validationError.value = 'Source Name is required'
+      return
+    }
+    if (!url.value) {
+      validationError.value = 'URL is required'
+      return
+    }
     
     try {
       new URL(url.value)
@@ -57,13 +68,14 @@ async function submit() {
       .filter(line => line.length > 0)
 
     await store.addSource({
-      name: url.value, 
+      name: name.value, 
       url: url.value,
       max_depth: maxDepth.value,
       exclusions: exclusionsList
     })
 
     if (!store.error) {
+      name.value = ''
       url.value = ''
       maxDepth.value = 0
       exclusions.value = ''
@@ -72,10 +84,15 @@ async function submit() {
     }
   } else {
     if (file.value) {
+      if (!name.value) {
+        validationError.value = 'Source Name is required'
+        return
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const filePayload = file.value as any
-      await store.uploadSource(filePayload)
+      await store.uploadSource(filePayload, name.value)
       if (!store.error) {
+        name.value = ''
         file.value = null
         emit('submit')
       }
@@ -134,17 +151,35 @@ function onDrop(e: DragEvent) {
       <!-- Web Form -->
       <div v-if="activeTab === 'web'" class="space-y-6">
         <div class="flex flex-col space-y-4">
-          <div class="relative group">
-            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Globe class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <div class="space-y-2">
+            <label class="text-sm font-medium leading-none text-foreground">Source Name</label>
+            <div class="relative group">
+              <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <FileUp class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              </div>
+              <Input 
+                v-model="name" 
+                type="text" 
+                placeholder="e.g., Company Documentation" 
+                :disabled="store.isLoading" 
+                class="pl-12 h-14 text-lg font-mono bg-background/50 focus:bg-background transition-all shadow-sm border-muted-foreground/20 focus:border-primary"
+              />
             </div>
-            <Input 
-              v-model="url" 
-              type="text" 
-              placeholder="https://docs.example.com" 
-              :disabled="store.isLoading" 
-              class="pl-12 h-14 text-lg font-mono bg-background/50 focus:bg-background transition-all shadow-sm border-muted-foreground/20 focus:border-primary"
-            />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium leading-none text-foreground">Source Link</label>
+            <div class="relative group">
+              <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Globe class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              </div>
+              <Input 
+                v-model="url" 
+                type="text" 
+                placeholder="https://docs.example.com" 
+                :disabled="store.isLoading" 
+                class="pl-12 h-14 text-lg font-mono bg-background/50 focus:bg-background transition-all shadow-sm border-muted-foreground/20 focus:border-primary"
+              />
+            </div>
           </div>
           
           <Button
@@ -207,6 +242,21 @@ function onDrop(e: DragEvent) {
 
       <!-- File Form -->
       <div v-else class="space-y-6">
+        <div class="space-y-2">
+          <label class="text-sm font-medium leading-none text-foreground">Source Name</label>
+          <div class="relative group">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <FileUp class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            </div>
+            <Input 
+              v-model="name" 
+              type="text" 
+              placeholder="e.g., Quarterly Report 2024" 
+              :disabled="store.isLoading" 
+              class="pl-12 h-14 text-lg font-mono bg-background/50 focus:bg-background transition-all shadow-sm border-muted-foreground/20 focus:border-primary"
+            />
+          </div>
+        </div>
         <div 
           class="border-2 border-dashed rounded-xl p-8 transition-all text-center relative"
           :class="[
@@ -256,11 +306,11 @@ function onDrop(e: DragEvent) {
         </Button>
       </div>
 
-      <div v-if="store.error" class="bg-destructive/10 border border-destructive/20 rounded-md p-3 flex items-start gap-3">
+      <div v-if="store.error || validationError" class="bg-destructive/10 border border-destructive/20 rounded-md p-3 flex items-start gap-3">
         <div class="bg-destructive text-destructive-foreground rounded-full p-0.5 mt-0.5">
           <Plus class="h-3 w-3 rotate-45" />
         </div>
-        <p class="text-sm text-destructive font-medium">{{ store.error }}</p>
+        <p class="text-sm text-destructive font-medium">{{ store.error || validationError }}</p>
       </div>
     </form>
     

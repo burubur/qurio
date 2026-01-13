@@ -152,3 +152,27 @@ func TestResultConsumer_PublishesDiscoveredLinks(t *testing.T) {
 		t.Errorf("Expected last topic %s, got %s", config.TopicIngestWeb, pub.LastTopic)
 	}
 }
+
+func TestResultConsumer_UsesConfiguredName(t *testing.T) {
+	store := &MockStore{}
+	pub := &MockPublisher{}
+	sf := &MockSourceFetcher{} // Returns "test-source" as name
+	consumer := NewResultConsumer(store, &MockUpdater{}, &MockJobRepo{}, sf, &MockPageManager{}, pub)
+
+	payload := map[string]string{
+		"source_id": "src-1",
+		"content": "test content",
+		"url": "http://example.com",
+		"status": "success",
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	consumer.HandleMessage(msg)
+
+	// Verify published payload contains source_name
+	assert.NotEmpty(t, pub.LastBody)
+	var published IngestEmbedPayload
+	json.Unmarshal(pub.LastBody, &published)
+	assert.Equal(t, "test-source", published.SourceName)
+}

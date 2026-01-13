@@ -84,7 +84,7 @@ func TestTopicRouting(t *testing.T) {
 
     // 5. Action: Create File Source
     // Upload calls repo.Save then Publish
-    _, err = svc.Upload(ctx, "/tmp/test.pdf", "hash-topic-test")
+    _, err = svc.Upload(ctx, "/tmp/test.pdf", "hash-topic-test", "Test PDF")
     require.NoError(t, err)
 
     // 6. Verify File Topic

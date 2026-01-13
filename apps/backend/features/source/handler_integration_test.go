@@ -40,6 +40,7 @@ func TestHandler_Upload_Integration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = part.Write([]byte("dummy pdf content"))
 	require.NoError(t, err)
+	writer.WriteField("name", "Test Integration File")
 	writer.Close()
 
 	// Request

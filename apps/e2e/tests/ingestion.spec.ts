@@ -22,6 +22,9 @@ test.describe('Document Ingestion', () => {
       buffer: Buffer.from(fileContent)
     });
 
+    // Fill Name (Mandatory now)
+    await page.getByPlaceholder('e.g., Quarterly Report 2024').fill(fileName);
+
     // 4. Click Upload & Ingest
     const uploadBtn = page.getByRole('button', { name: 'Upload & Ingest' });
     await expect(uploadBtn).toBeEnabled();
@@ -79,6 +82,9 @@ test.describe('Document Ingestion', () => {
       buffer: Buffer.from(pdfBytes)
     });
 
+    // Fill Name (Mandatory now)
+    await page.getByPlaceholder('e.g., Quarterly Report 2024').fill(fileName);
+
     // 5. Click Upload & Ingest
     const uploadBtn = page.getByRole('button', { name: 'Upload & Ingest' });
     await expect(uploadBtn).toBeEnabled();
@@ -114,6 +120,9 @@ test.describe('Document Ingestion', () => {
       mimeType: 'text/markdown',
       buffer: Buffer.from(fileContent)
     });
+
+    // Fill Name (Mandatory now)
+    await page.getByPlaceholder('e.g., Quarterly Report 2024').fill(fileName);
 
     await page.getByRole('button', { name: 'Upload & Ingest' }).click();
     const sourceCard = page.locator('.rounded-xl', { hasText: fileName }).first();

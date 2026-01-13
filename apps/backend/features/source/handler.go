@@ -32,6 +32,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		URL        string   `json:"url"`
 		MaxDepth   int      `json:"max_depth"`
 		Exclusions []string `json:"exclusions"`
+		Name       string   `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(r.Context(), w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
@@ -43,11 +44,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Name == "" {
+		h.writeError(r.Context(), w, "VALIDATION_ERROR", "Name is required", http.StatusBadRequest)
+		return
+	}
+
 	src := &Source{
 		Type:       req.Type,
 		URL:        req.URL,
 		MaxDepth:   req.MaxDepth,
 		Exclusions: req.Exclusions,
+		Name:       req.Name,
 	}
 	if err := h.service.Create(r.Context(), src); err != nil {
 		if err.Error() == "Duplicate detected" {
@@ -71,6 +78,12 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// 50 MB limit (memory)
 	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		h.writeError(r.Context(), w, "BAD_REQUEST", "File too large", http.StatusBadRequest)
+		return
+	}
+
+	name := r.FormValue("name")
+	if name == "" {
+		h.writeError(r.Context(), w, "BAD_REQUEST", "Name is required", http.StatusBadRequest)
 		return
 	}
 
@@ -127,7 +140,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	fileHash := fmt.Sprintf("%x", hash.Sum(nil))
 
 	// Call Service
-	src, err := h.service.Upload(r.Context(), path, fileHash)
+	src, err := h.service.Upload(r.Context(), path, fileHash, name)
 	if err != nil {
 		// Clean up file if duplicate or error
 		os.Remove(path)

@@ -10,7 +10,8 @@ test.describe('Ingestion Failure and Retry Flow', () => {
     const createRes = await request.post('http://localhost:8081/sources', {
       data: {
         url: invalidUrl,
-        max_depth: 0
+        max_depth: 0,
+        name: 'Invalid Source Test'
       }
     });
     

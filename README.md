@@ -147,10 +147,10 @@ Once connected, your agent will have access to the following tools:
 | `qurio_read_page` | **Read a full page.** Retrieves the complete content of a specific document or web page found via search or listing. |
 
 ### 5. Roadmap
-- [ ] Supports multiple different models beyond Gemini
-- [ ] Rework crawler & embedder parallelization
-- [ ] Supports more granular i.e. section by section page retrieval
+- [x] Rework crawler & embedder parallelization
 - [ ] Migrate to Streamable HTTP 
+- [ ] Supports multiple different models beyond Gemini
+- [ ] Supports more granular i.e. section by section page retrieval
 
 ## 📄 License
 
