@@ -21,7 +21,10 @@ producer = None
 # We use a value slightly higher than nsq_max_in_flight to allow for buffering,
 # or match it to enforce strict parallelism.
 # Defaulting to 8 matches the typical core count/worker capacity.
-WORKER_SEMAPHORE = asyncio.Semaphore(8)
+# Initialized to a safe default (1) to support tests/imports; overwritten in main().
+WORKER_SEMAPHORE = asyncio.Semaphore(1)
+
+MAX_RETRIES = 3
 
 def handle_message(message):
     """
@@ -158,8 +161,27 @@ async def process_message(message):
         logger.warning("processing_cancelled_due_to_connection_loss", source_id=source_id if 'source_id' in locals() else "unknown")
         return
 
-    except Exception as e:
-        logger.error("message_processing_failed", error=str(e))
+    except (asyncio.TimeoutError, Exception) as e:
+        # Check for transient errors
+        is_transient = "Timeout" in str(e) or "Connection" in str(e) or isinstance(e, asyncio.TimeoutError)
+        
+        if is_transient and message.attempts <= MAX_RETRIES:
+            logger.warning("task_requeue_transient_error", 
+                           source_id=source_id if 'source_id' in locals() else "unknown", 
+                           attempt=message.attempts, 
+                           error=str(e))
+            # Backoff: 30s, 60s, 90s
+            delay = message.attempts * 30 
+            try:
+                message.requeue(delay=delay, backoff=True)
+            except Exception as req_ex:
+                 logger.error("requeue_failed", error=str(req_ex))
+                 # Fallthrough to finish? No, if requeue fails, we might as well try to finish or just return
+                 # But safer to let it be or try to finish if requeue failed explicitly
+                 pass
+            return
+
+        logger.error("message_processing_failed", error=str(e), attempts=message.attempts)
         
         if producer and 'source_id' in locals():
             fail_payload = {
@@ -221,8 +243,12 @@ def main():
     # nsq.Writer connects to nsqd_tcp_addresses
     global producer
     producer = nsq.Writer([settings.nsqd_tcp_address])
+
+    # Initialize semaphore with configured concurrency
+    global WORKER_SEMAPHORE
+    WORKER_SEMAPHORE = asyncio.Semaphore(settings.nsq_max_in_flight)
     
-    logger.info("nsq_initialized")
+    logger.info("nsq_initialized", max_in_flight=settings.nsq_max_in_flight)
     
     # Run the loop
     loop.run_forever()

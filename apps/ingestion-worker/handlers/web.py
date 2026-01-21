@@ -155,16 +155,23 @@ async def handle_web_task(url: str, api_key: str = None, crawler_factory=default
         # excluded_tags=['nav', 'footer', 'aside', 'header'], 
         exclude_external_links=True,
         markdown_generator=md_generator,
-        check_robots_txt=True 
+        check_robots_txt=True,
+        page_timeout=app_settings.crawler_page_timeout
     )
     
     # Initialize crawler
     try:
         async with crawler_factory(verbose=True) as crawler:
             # Single page crawl
+            # Use configured timeout (converted to seconds) plus a small buffer (e.g. 5s) 
+            # or just use the same value / 1000. 
+            # Since page_timeout is internal to crawler, the outer wait_for is a safety net.
+            # We'll set outer timeout slightly higher than inner timeout to let inner timeout trigger first if possible.
+            outer_timeout = (app_settings.crawler_page_timeout / 1000) + 5.0
+            
             result = await asyncio.wait_for(
                 crawler.arun(url=url, config=config),
-                timeout=300.0
+                timeout=outer_timeout
             )
             
             if not result.success:
