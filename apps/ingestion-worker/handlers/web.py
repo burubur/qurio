@@ -84,7 +84,7 @@ def extract_web_metadata(result, url: str) -> dict:
 def default_crawler_factory(config=None, **kwargs):
     return AsyncWebCrawler(config=config, **kwargs)
 
-async def handle_web_task(url: str, api_key: str = None, crawler_factory=default_crawler_factory) -> list[dict]:
+async def handle_web_task(url: str, api_key: str = None, crawler=None) -> list[dict]:
     """
     Crawls a single page and returns content and discovered internal links.
     """
@@ -93,43 +93,9 @@ async def handle_web_task(url: str, api_key: str = None, crawler_factory=default
     # Use passed api_key or fallback to settings
     token = api_key if api_key else app_settings.gemini_api_key
     
-    # 1. Manifest Detection (llms.txt)
     results = []
     
-    if not url.endswith("llms.txt"):
-        try:
-            parsed = urlparse(url)
-            base_url = f"{parsed.scheme}://{parsed.netloc}"
-            manifest_url = f"{base_url}/llms.txt"
-            
-            # Lightweight check/crawl for manifest
-            manifest_config = CrawlerRunConfig(
-                markdown_generator=DefaultMarkdownGenerator(),
-                cache_mode=CacheMode.ENABLED
-            )
-            
-            async with crawler_factory(verbose=False) as manifest_crawler:
-                manifest_res = await asyncio.wait_for(
-                    manifest_crawler.arun(url=manifest_url, config=manifest_config),
-                    timeout=10.0 # Short timeout for manifest check
-                )
-                
-                if manifest_res.success and manifest_res.markdown:
-                    logger.info("manifest_found", url=manifest_url)
-                    manifest_meta = extract_web_metadata(manifest_res, manifest_url)
-                    
-                    results.append({
-                        "url": manifest_res.url,
-                        "title": manifest_meta['title'] or "llms.txt",
-                        "path": manifest_meta['path'],
-                        "content": manifest_res.markdown,
-                        "links": manifest_meta['links']
-                    })
-        except Exception as e:
-            # Silent failure for manifest detection is acceptable
-            logger.debug("manifest_check_failed", error=str(e))
-
-    # 2. Configure Generator (Bypass LLM for .txt/llms.txt)
+    # Configure Generator (Bypass LLM for .txt/llms.txt)
     if url.endswith(".txt") or url.endswith("llms.txt"):
         md_generator = DefaultMarkdownGenerator()
         logger.info("llm_bypass_enabled", url=url, reason="text_file")
@@ -161,12 +127,10 @@ async def handle_web_task(url: str, api_key: str = None, crawler_factory=default
     
     # Initialize crawler
     try:
-        async with crawler_factory(verbose=True) as crawler:
-            # Single page crawl
-            # Use configured timeout (converted to seconds) plus a small buffer (e.g. 5s) 
-            # or just use the same value / 1000. 
-            # Since page_timeout is internal to crawler, the outer wait_for is a safety net.
-            # We'll set outer timeout slightly higher than inner timeout to let inner timeout trigger first if possible.
+        # Use existing crawler if provided, otherwise create a new ephemeral one
+        if crawler:
+            # Single page crawl using shared instance
+            # Use configured timeout (converted to seconds) plus a small buffer (e.g. 5s)
             outer_timeout = (app_settings.crawler_page_timeout / 1000) + 5.0
             
             result = await asyncio.wait_for(
@@ -189,8 +153,35 @@ async def handle_web_task(url: str, api_key: str = None, crawler_factory=default
                 "content": result.markdown,
                 "links": meta['links']
             })
-            
             return results
+            
+        else:
+            # Ephemeral crawler (old behavior)
+            async with default_crawler_factory(verbose=True) as new_crawler:
+                outer_timeout = (app_settings.crawler_page_timeout / 1000) + 5.0
+                
+                result = await asyncio.wait_for(
+                    new_crawler.arun(url=url, config=config),
+                    timeout=outer_timeout
+                )
+                
+                if not result.success:
+                    logger.error("crawl_failed", url=url, error=result.error_message)
+                    raise Exception(f"Crawl failed: {result.error_message}")
+                    
+                meta = extract_web_metadata(result, url)
+
+                logger.info("crawl_completed", url=url, links_found=len(meta['links']), title=meta['title'], path=meta['path'])
+
+                results.append({
+                    "url": result.url,
+                    "title": meta['title'],
+                    "path": meta['path'],
+                    "content": result.markdown,
+                    "links": meta['links']
+                })
+                
+                return results
 
     except asyncio.TimeoutError:
         logger.error("crawl_timeout", url=url)

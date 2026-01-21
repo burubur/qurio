@@ -9,6 +9,7 @@ from config import settings
 from handlers.web import handle_web_task
 from handlers.file import handle_file_task, IngestionError
 from logger import configure_logger
+from crawl4ai import AsyncWebCrawler
 
 # Configure logging
 configure_logger()
@@ -16,6 +17,8 @@ logger = structlog.get_logger(__name__)
 
 # Global producer
 producer = None
+# Global Crawler
+CRAWLER = None
 
 # Global concurrency semaphore
 # We use a value slightly higher than nsq_max_in_flight to allow for buffering,
@@ -23,6 +26,18 @@ producer = None
 # Defaulting to 8 matches the typical core count/worker capacity.
 # Initialized to a safe default (1) to support tests/imports; overwritten in main().
 WORKER_SEMAPHORE = asyncio.Semaphore(1)
+
+async def init_crawler():
+    global CRAWLER
+    logger.info("initializing_global_crawler")
+    try:
+        CRAWLER = AsyncWebCrawler(verbose=True)
+        await CRAWLER.start()
+        logger.info("global_crawler_started")
+    except Exception as e:
+        logger.error("global_crawler_init_failed", error=str(e))
+        # If crawler fails to start, we should probably exit or retry
+        raise
 
 def handle_message(message):
     """
@@ -35,6 +50,7 @@ def handle_message(message):
 
 async def process_message(message):
     global producer
+    global CRAWLER
     
     # Keep message alive
     stop_touch = asyncio.Event()
@@ -72,7 +88,8 @@ async def process_message(message):
                 url = data.get('url')
                 # exclusions = data.get('exclusions', []) # Deprecated/Unused
                 api_key = data.get('gemini_api_key')
-                results_list = await handle_web_task(url, api_key=api_key)
+                # Pass the global crawler
+                results_list = await handle_web_task(url, api_key=api_key, crawler=CRAWLER)
             
             elif task_type == 'file':
                 file_path = data.get('path')
@@ -238,7 +255,8 @@ def main():
         lookupd_http_addresses=[settings.nsq_lookupd_http],
         topic=settings.nsq_topic_ingest,
         channel=settings.nsq_channel_worker,
-        max_in_flight=settings.nsq_max_in_flight
+        max_in_flight=settings.nsq_max_in_flight,
+        heartbeat_interval=60
     )
     
     # Create Producer (Writer)
@@ -251,6 +269,9 @@ def main():
     WORKER_SEMAPHORE = asyncio.Semaphore(settings.nsq_max_in_flight)
     
     logger.info("nsq_initialized", max_in_flight=settings.nsq_max_in_flight)
+
+    # Initialize Global Crawler
+    loop.run_until_complete(init_crawler())
     
     # Run the loop
     loop.run_forever()
