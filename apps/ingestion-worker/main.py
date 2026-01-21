@@ -24,8 +24,6 @@ producer = None
 # Initialized to a safe default (1) to support tests/imports; overwritten in main().
 WORKER_SEMAPHORE = asyncio.Semaphore(1)
 
-MAX_RETRIES = 3
-
 def handle_message(message):
     """
     pynsq callback. Must be sync.
@@ -165,15 +163,19 @@ async def process_message(message):
         # Check for transient errors
         is_transient = "Timeout" in str(e) or "Connection" in str(e) or isinstance(e, asyncio.TimeoutError)
         
-        if is_transient and message.attempts <= MAX_RETRIES:
+        if is_transient and message.attempts <= settings.retry_max_attempts:
+            # Exponential Backoff (in milliseconds)
+            # attempts=1 -> 2^0 * initial
+            backoff_factor = settings.retry_backoff_multiplier ** (message.attempts - 1)
+            delay = min(settings.retry_initial_delay_ms * backoff_factor, settings.retry_max_delay_ms)
+            
             logger.warning("task_requeue_transient_error", 
                            source_id=source_id if 'source_id' in locals() else "unknown", 
-                           attempt=message.attempts, 
+                           attempt=message.attempts,
+                           delay_ms=delay, 
                            error=str(e))
-            # Backoff: 30s, 60s, 90s
-            delay = message.attempts * 30 
             try:
-                message.requeue(delay=delay, backoff=True)
+                message.requeue(delay=int(delay), backoff=True)
             except Exception as req_ex:
                  logger.error("requeue_failed", error=str(req_ex))
                  # Fallthrough to finish? No, if requeue fails, we might as well try to finish or just return
