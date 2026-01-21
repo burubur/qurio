@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+	"database/sql"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/google/uuid"
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/testutils"
@@ -64,28 +66,63 @@ func TestJobRepo_Integration(t *testing.T) {
 	assert.Equal(t, j2.ID, jobs[0].ID, "Newest job should be first")
 	assert.Equal(t, j1.ID, jobs[1].ID, "Oldest job should be last")
 
-	// 4. Verify Cascade Delete
-	// Delete the source
-	err = sourceRepo.SoftDelete(ctx, src.ID)
-	// Soft delete might not trigger cascade if foreign key is on the table itself and doesn't check deleted_at.
-	// Usually CASCADE is on DELETE action. Soft delete is an UPDATE set deleted_at.
-	// So SoftDelete might NOT remove jobs if they are physically present.
-	// But the Plan says "Verify failed_jobs records are deleted when parent source is deleted (Cascade)".
-	// Does it mean Soft Delete of source should delete jobs? Or hard delete?
-	// If the requirement is "Cascade Delete", strictly speaking that's Database FK behavior on DELETE.
-	// If the application does Soft Delete, the FK cascade won't trigger unless we Hard Delete.
-	// Let's check if there is a Hard Delete or if Soft Delete logic explicitly deletes jobs.
+	// 4. Verify Get
+	gotJ1, err := jobRepo.Get(ctx, j1.ID)
+	require.NoError(t, err)
+	assert.Equal(t, j1.ID, gotJ1.ID)
+	assert.Equal(t, "error 1", gotJ1.Error)
+
+	// 5. Verify Delete
+	err = jobRepo.Delete(ctx, j1.ID)
+	require.NoError(t, err)
 	
-	// Let's check if there's a Hard Delete in Source Repo. No, only SoftDelete.
-	// Maybe the requirement implies that when we clean up sources (Hard Delete), jobs go away.
-	// Or maybe the integration test should simulate a hard delete to verify the FK constraint.
-	
-	// Let's try Hard Delete manually to verify FK constraint.
+	// Verify it's gone
+	_, err = jobRepo.Get(ctx, j1.ID)
+	assert.Error(t, err)
+	assert.Equal(t, sql.ErrNoRows, err)
+
+	count, err := jobRepo.Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// 6. Verify Cascade Delete (Hard Delete of Source)
 	_, err = s.DB.ExecContext(ctx, "DELETE FROM sources WHERE id = $1", src.ID)
 	require.NoError(t, err)
 
 	// Now check if jobs are gone
-	count, err := jobRepo.Count(ctx)
+	count, err = jobRepo.Count(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 0, count, "Jobs should be deleted via cascade when source is hard deleted")
+}
+
+func TestJobRepo_Empty(t *testing.T) {
+	if testing.Short() { t.Skip() }
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	jobRepo := job.NewPostgresRepo(s.DB)
+	ctx := context.Background()
+
+	count, err := jobRepo.Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	list, err := jobRepo.List(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, list)
+}
+
+func TestJobRepo_Get_NotFound(t *testing.T) {
+	if testing.Short() { t.Skip() }
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	jobRepo := job.NewPostgresRepo(s.DB)
+	ctx := context.Background()
+
+	_, err := jobRepo.Get(ctx, uuid.NewString())
+	assert.Error(t, err)
+	assert.Equal(t, sql.ErrNoRows, err)
 }

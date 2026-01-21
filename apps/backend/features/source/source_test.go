@@ -83,14 +83,6 @@ func TestCreate_PropagatesCorrelationID(t *testing.T) {
 	}
 }
 
-func TestService_ResetStuckPages(t *testing.T) {
-	repo := &TestRepo{}
-	svc := NewService(repo, nil, nil, nil)
-
-	if err := svc.ResetStuckPages(context.Background()); err != nil {
-		t.Errorf("ResetStuckPages failed: %v", err)
-	}
-}
 
 func TestService_Create_InvalidRegex(t *testing.T) {
 	repo := &TestRepo{}

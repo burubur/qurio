@@ -40,4 +40,13 @@ func TestBootstrap_Integration(t *testing.T) {
 	err = deps.DB.QueryRow("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'sources')").Scan(&exists)
 	require.NoError(t, err)
 	assert.True(t, exists, "sources table should exist")
+
+	// Verify Weaviate connectivity
+	// We use EnsureSchema again as a connectivity check. GraphQL (CountChunks) seems flaky immediately after bootstrap in tests.
+	err = deps.VectorStore.EnsureSchema(context.Background())
+	assert.NoError(t, err, "Weaviate connectivity check failed")
+
+	// Verify NSQ
+	err = deps.NSQProducer.Ping()
+	assert.NoError(t, err)
 }

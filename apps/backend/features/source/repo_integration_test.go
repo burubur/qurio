@@ -2,6 +2,7 @@ package source_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,7 +63,7 @@ func TestSourceRepo_Integration(t *testing.T) {
 
 	// Verify it's gone from standard Get/List
 	_, err = repo.Get(ctx, src.ID)
-	assert.Error(t, err) // Should be sql.ErrNoRows
+	assert.Error(t, err) 
 
 	listAfterDelete, err := repo.List(ctx)
 	require.NoError(t, err)
@@ -82,7 +83,7 @@ func TestSourceRepo_Integration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 
-	// ResetStuckPages
+	// ResetStuckPages (Nothing old enough yet)
 	resetCount, err := repo.ResetStuckPages(ctx, 1*time.Hour)
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), resetCount)
@@ -145,4 +146,91 @@ func TestRepo_UniqueIndex_SoftDelete(t *testing.T) {
 	}
 	err = repo.Save(ctx, srcC)
 	assert.Error(t, err)
+}
+
+func TestRepo_ResetStuckPages_Effectiveness(t *testing.T) {
+	if testing.Short() { t.Skip() }
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	repo := source.NewPostgresRepo(s.DB)
+	ctx := context.Background()
+
+	// Create Source
+	src := &source.Source{Type: "web", URL: "http://example.com", ContentHash: "hash-stuck", Name: "S"}
+	repo.Save(ctx, src)
+
+	// Create Stuck Page (processing)
+	repo.BulkCreatePages(ctx, []source.SourcePage{
+		{SourceID: src.ID, URL: "http://example.com/stuck", Status: "processing", Depth: 0},
+	})
+
+	// Manually backdate updated_at
+	_, err := s.DB.Exec("UPDATE source_pages SET updated_at = NOW() - INTERVAL '2 hours' WHERE url = $1", "http://example.com/stuck")
+	require.NoError(t, err)
+
+	// Reset
+	count, err := repo.ResetStuckPages(ctx, 1*time.Hour)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	// Verify status is pending
+	pages, _ := repo.GetPages(ctx, src.ID)
+	assert.Equal(t, "pending", pages[0].Status)
+	assert.Equal(t, "timeout_reset", pages[0].Error)
+}
+
+func TestRepo_DeletePages(t *testing.T) {
+	if testing.Short() { t.Skip() }
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	repo := source.NewPostgresRepo(s.DB)
+	ctx := context.Background()
+
+	src := &source.Source{Type: "web", URL: "http://example.com", ContentHash: "hash-del", Name: "S"}
+	repo.Save(ctx, src)
+
+	repo.BulkCreatePages(ctx, []source.SourcePage{
+		{SourceID: src.ID, URL: "http://example.com/1", Status: "pending"},
+		{SourceID: src.ID, URL: "http://example.com/2", Status: "completed"},
+	})
+
+	err := repo.DeletePages(ctx, src.ID)
+	require.NoError(t, err)
+
+	pages, err := repo.GetPages(ctx, src.ID)
+	require.NoError(t, err)
+	assert.Empty(t, pages)
+}
+
+func TestRepo_Concurrent_Page_Creation(t *testing.T) {
+	if testing.Short() { t.Skip() }
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	repo := source.NewPostgresRepo(s.DB)
+	ctx := context.Background()
+	src := &source.Source{Type: "web", URL: "http://example.com", ContentHash: "hash-conc", Name: "S"}
+	repo.Save(ctx, src)
+
+	var wg sync.WaitGroup
+	// Try to create SAME page from multiple routines
+	// ON CONFLICT DO NOTHING should prevent errors
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			repo.BulkCreatePages(ctx, []source.SourcePage{
+				{SourceID: src.ID, URL: "http://example.com/shared", Status: "pending"},
+			})
+		}()
+	}
+	wg.Wait()
+
+	pages, _ := repo.GetPages(ctx, src.ID)
+	assert.Len(t, pages, 1) // Should only be 1
 }

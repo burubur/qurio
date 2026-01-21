@@ -27,7 +27,7 @@ func TestNew_Success(t *testing.T) {
 	cfg := &config.Config{}
 
 	// Act
-	application, err := New(cfg, db, mockVec, mockPub, logger)
+	application, err := New(cfg, db, mockVec, mockPub, logger, nil)
 
 	// Assert
 	assert.NoError(t, err)
@@ -82,6 +82,6 @@ func TestNew_PanicsOnInvalidDB(t *testing.T) {
 
 	// Act & Assert
 	assert.Panics(t, func() {
-		_, _ = New(cfg, fakeDB, mockVec, mockPub, logger)
+		_, _ = New(cfg, fakeDB, mockVec, mockPub, logger, nil)
 	})
 }

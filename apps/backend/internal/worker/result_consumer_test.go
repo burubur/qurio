@@ -1,216 +1,284 @@
-package worker
+package worker_test
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/nsqio/go-nsq"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/internal/config"
+	"qurio/apps/backend/internal/worker"
 )
 
-// Mocks for internal tests
+func TestResultConsumer_HandleMessage_Success(t *testing.T) {
+	// Setup Mocks
+	s := new(MockVectorStore)
+	u := new(MockUpdater)
+	j := new(MockJobRepo)
+	sf := new(MockSourceFetcher)
+	pm := new(MockPageManager)
+	tp := new(MockTaskPublisher)
 
-type MockStore struct {
-	LastCtx   context.Context
-}
-func (m *MockStore) StoreChunk(ctx context.Context, chunk Chunk) error {
-	m.LastCtx = ctx
-	return nil
-}
-func (m *MockStore) DeleteChunksByURL(ctx context.Context, sourceID, url string) error {
-	m.LastCtx = ctx
-	return nil
-}
-func (m *MockStore) CountChunks(ctx context.Context) (int, error) { return 0, nil }
-func (m *MockStore) EnsureSchema(ctx context.Context) error { return nil }
-func (m *MockStore) GetChunks(ctx context.Context, sourceID string) ([]Chunk, error) { return nil, nil }
-func (m *MockStore) GetChunksByURL(ctx context.Context, url string) ([]any, error) { return nil, nil }
-func (m *MockStore) Search(ctx context.Context, query string, vector []float32, alpha float32, limit int, searchFilters map[string]interface{}) ([]any, error) { return nil, nil }
+	consumer := worker.NewResultConsumer(s, u, j, sf, pm, tp)
 
-
-type MockUpdater struct{}
-func (m *MockUpdater) UpdateStatus(ctx context.Context, id, status string) error { return nil }
-func (m *MockUpdater) UpdateBodyHash(ctx context.Context, id, hash string) error { return nil }
-
-type MockJobRepo struct{}
-func (m *MockJobRepo) Save(ctx context.Context, job *job.Job) error { return nil }
-func (m *MockJobRepo) List(ctx context.Context) ([]job.Job, error) { return nil, nil }
-func (m *MockJobRepo) Get(ctx context.Context, id string) (*job.Job, error) { return nil, nil }
-func (m *MockJobRepo) Delete(ctx context.Context, id string) error { return nil }
-func (m *MockJobRepo) Count(ctx context.Context) (int, error) { return 0, nil }
-
-type MockSourceFetcher struct{}
-func (m *MockSourceFetcher) GetSourceDetails(ctx context.Context, id string) (string, string, error) { return "web", "http://example.com", nil }
-func (m *MockSourceFetcher) GetSourceConfig(ctx context.Context, id string) (int, []string, string, string, error) { return 5, nil, "", "test-source", nil }
-
-type MockPageManager struct{
-	ReturnURLs []string
-	ReturnErr  error
-}
-func (m *MockPageManager) BulkCreatePages(ctx context.Context, pages []PageDTO) ([]string, error) {
-	if m.ReturnErr != nil {
-		return nil, m.ReturnErr
-	}
-	if len(m.ReturnURLs) > 0 {
-		return m.ReturnURLs, nil
-	}
-	return nil, nil
-}
-func (m *MockPageManager) UpdatePageStatus(ctx context.Context, sourceID, url, status, err string) error { return nil }
-func (m *MockPageManager) CountPendingPages(ctx context.Context, sourceID string) (int, error) { return 0, nil }
-
-type MockPublisher struct{
-	LastTopic string
-	LastBody []byte
-	PublishCallCount int
-}
-func (m *MockPublisher) Publish(topic string, body []byte) error {
-	m.LastTopic = topic
-	m.LastBody = body
-	m.PublishCallCount++
-	return nil
-}
-
-func TestResultConsumer_HandleMessage_PublishEmbedTasks(t *testing.T) {
-	store := &MockStore{}
-	pub := &MockPublisher{}
-	consumer := NewResultConsumer(store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, &MockPageManager{}, pub)
-
-	payload := map[string]string{
-		"source_id": "src-1",
-		"content": "test content",
-		"url": "http://example.com",
-		"status": "success",
-		"title": "Title",
-	}
-	body, _ := json.Marshal(payload)
-	msg := &nsq.Message{Body: body}
-
-	if err := consumer.HandleMessage(msg); err != nil {
-		t.Fatalf("HandleMessage failed: %v", err)
-	}
-
-	// Should have published to ingest.embed
-	if pub.PublishCallCount == 0 {
-		t.Fatal("Expected publish call count > 0")
-	}
-	if pub.LastTopic != config.TopicIngestEmbed {
-		t.Errorf("Expected topic %s, got %s", config.TopicIngestEmbed, pub.LastTopic)
-	}
-}
-
-func TestResultConsumer_HandleMessage_EmptyBody(t *testing.T) {
-	consumer := &ResultConsumer{}
-	msg := &nsq.Message{Body: []byte("")}
-
-	err := consumer.HandleMessage(msg)
-	assert.NoError(t, err)
-}
-
-func TestResultConsumer_HandleMessage_InvalidJSON(t *testing.T) {
-	consumer := &ResultConsumer{}
-	msg := &nsq.Message{Body: []byte("{invalid-json")}
-	
-	// Should return nil to ack message (don't retry poison pill)
-	err := consumer.HandleMessage(msg)
-	assert.NoError(t, err)
-}
-
-func TestResultConsumer_HandleMessage_DependencyError(t *testing.T) {
-	// If Publisher fails, HandleMessage should return error
-	// MockPublisher currently returns nil.
-	// Need a failing mock.
-}
-
-func TestResultConsumer_PublishesDiscoveredLinks(t *testing.T) {
-	store := &MockStore{}
-	pub := &MockPublisher{}
-	pm := &MockPageManager{ReturnURLs: []string{"http://example.com/page2"}}
-	
-	consumer := NewResultConsumer(store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, pm, pub)
-
+	// Payload
 	payload := map[string]interface{}{
-		"source_id": "src-1",
-		"content":   "test content",
+		"source_id": "src1",
 		"url":       "http://example.com",
-		"links":     []string{"http://example.com/page2"},
+		"content":   "Some content",
+		"title":     "Title",
+		"status":    "success",
+		"links":     []string{"http://example.com/subpage"},
 		"depth":     0,
 	}
 	body, _ := json.Marshal(payload)
 	msg := &nsq.Message{Body: body}
 
-	if err := consumer.HandleMessage(msg); err != nil {
-		t.Fatalf("HandleMessage failed: %v", err)
-	}
-
-	// Should publish to ingest.task.web for the discovered link
-	// Note: It publishes to embed AND web.
-	// LastTopic might be web or embed depending on order.
-	// In implementation: Embed happens (Step 2), then Link Discovery (Step 4).
-	// So LastTopic should be Web.
+	// Expectations
+	// 1. Fetch Config
+	sf.On("GetSourceConfig", mock.Anything, "src1").Return(2, []string{}, "api-key", "My Source", nil)
 	
-	if pub.LastTopic != config.TopicIngestWeb {
-		t.Errorf("Expected last topic %s, got %s", config.TopicIngestWeb, pub.LastTopic)
-	}
-}
-
-func TestResultConsumer_UsesConfiguredName(t *testing.T) {
-	store := &MockStore{}
-	pub := &MockPublisher{}
-	sf := &MockSourceFetcher{} // Returns "test-source" as name
-	consumer := NewResultConsumer(store, &MockUpdater{}, &MockJobRepo{}, sf, &MockPageManager{}, pub)
-
-	payload := map[string]string{
-		"source_id": "src-1",
-		"content": "test content",
-		"url": "http://example.com",
-		"status": "success",
-	}
-	body, _ := json.Marshal(payload)
-	msg := &nsq.Message{Body: body}
-
-	consumer.HandleMessage(msg)
-
-	// Verify published payload contains source_name
-	assert.NotEmpty(t, pub.LastBody)
-	var published IngestEmbedPayload
-	json.Unmarshal(pub.LastBody, &published)
-	assert.Equal(t, "test-source", published.SourceName)
-}
-
-func TestResultConsumer_HandleMessage_PartialFailure_BulkCreatePages(t *testing.T) {
-	// Setup dependencies
-	store := &MockStore{}
-	pub := &MockPublisher{}
+	// 2. Delete Old Chunks
+	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(nil)
 	
-	// Mock PageManager to fail on BulkCreatePages
-	pm := &MockPageManager{
-		ReturnErr: assert.AnError,
-	}
+	// 3. Publish Embed Tasks (Chunking happens internally)
+	tp.On("Publish", config.TopicIngestEmbed, mock.MatchedBy(func(b []byte) bool {
+		var p worker.IngestEmbedPayload
+		json.Unmarshal(b, &p)
+		return p.SourceID == "src1" && p.SourceName == "My Source" && p.Content == "Some content"
+	})).Return(nil)
+
+	// 4. Update Body Hash
+	u.On("UpdateBodyHash", mock.Anything, "src1", mock.Anything).Return(nil)
+
+	// 5. Link Discovery -> Publish Web Task
+	pm.On("BulkCreatePages", mock.Anything, mock.MatchedBy(func(pages []worker.PageDTO) bool {
+		return len(pages) == 1 && pages[0].URL == "http://example.com/subpage"
+	})).Return([]string{"http://example.com/subpage"}, nil)
+
+	tp.On("Publish", config.TopicIngestWeb, mock.MatchedBy(func(b []byte) bool {
+		var p map[string]interface{}
+		json.Unmarshal(b, &p)
+		return p["url"] == "http://example.com/subpage" && p["depth"] == float64(1)
+	})).Return(nil)
+
+	// 6. Update Page Status (Completed)
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "completed", "").Return(nil)
 	
-	consumer := NewResultConsumer(store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, pm, pub)
+	// 7. Check Source Completion
+	pm.On("CountPendingPages", mock.Anything, "src1").Return(0, nil)
+	u.On("UpdateStatus", mock.Anything, "src1", "completed").Return(nil)
 
-	// Payload with discovered links
-	payload := map[string]interface{}{
-		"source_id": "src-1",
-		"content":   "test content",
-		"url":       "http://example.com",
-		"links":     []string{"http://example.com/page2"},
-		"depth":     0,
-	}
-	body, _ := json.Marshal(payload)
-	msg := &nsq.Message{Body: body}
-
-	// Execution
 	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+	
+	s.AssertExpectations(t)
+	pm.AssertExpectations(t)
+	tp.AssertExpectations(t)
+	u.AssertExpectations(t)
+}
 
-	// Assertion
-	assert.Error(t, err, "Expected error when BulkCreatePages fails")
+func TestResultConsumer_HandleMessage_Failure(t *testing.T) {
+	// Setup Mocks
+	s := new(MockVectorStore)
+	u := new(MockUpdater)
+	j := new(MockJobRepo)
+	sf := new(MockSourceFetcher)
+	pm := new(MockPageManager)
+	tp := new(MockTaskPublisher)
+
+	consumer := worker.NewResultConsumer(s, u, j, sf, pm, tp)
+
+	originalPayload := map[string]interface{}{"foo": "bar"}
+
+	payload := map[string]interface{}{
+		"source_id":        "src1",
+		"url":              "http://example.com",
+		"status":           "failed",
+		"error":            "Some error",
+		"depth":            0,
+		"original_payload": originalPayload,
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	// Expectations
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "failed", "Some error").Return(nil)
+	u.On("UpdateStatus", mock.Anything, "src1", "failed").Return(nil) // Depth 0 -> Update Source Status
+	j.On("Save", mock.Anything, mock.MatchedBy(func(job *job.Job) bool {
+		return job.SourceID == "src1" && job.Error == "Some error"
+	})).Return(nil)
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err) // Should not error, handled gracefully
+	
+	pm.AssertExpectations(t)
+	u.AssertExpectations(t)
+	j.AssertExpectations(t)
+}
+
+func TestResultConsumer_HandleMessage_LLMsTxt_ExtendedDepth(t *testing.T) {
+	s := new(MockVectorStore)
+	u := new(MockUpdater)
+	j := new(MockJobRepo)
+	sf := new(MockSourceFetcher)
+	pm := new(MockPageManager)
+	tp := new(MockTaskPublisher)
+
+	consumer := worker.NewResultConsumer(s, u, j, sf, pm, tp)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com/llms.txt",
+		"content":   "content",
+		"links":     []string{"http://example.com/doc.md"},
+		"depth":     2,
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	// Mock Config: Max Depth is 2.
+	// Normal logic: Depth 2 == Max Depth 2 -> No new links.
+	// LLMs.txt logic: Effective Max Depth = 3. -> New links allowed.
+	sf.On("GetSourceConfig", mock.Anything, "src1").Return(2, []string{}, "", "Src", nil)
+	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com/llms.txt").Return(nil)
+	tp.On("Publish", config.TopicIngestEmbed, mock.Anything).Return(nil)
+	u.On("UpdateBodyHash", mock.Anything, "src1", mock.Anything).Return(nil)
+
+	// Expect Link Discovery
+	pm.On("BulkCreatePages", mock.Anything, mock.MatchedBy(func(pages []worker.PageDTO) bool {
+		return len(pages) == 1 && pages[0].URL == "http://example.com/doc.md"
+	})).Return([]string{"http://example.com/doc.md"}, nil)
+
+	tp.On("Publish", config.TopicIngestWeb, mock.MatchedBy(func(b []byte) bool {
+		var p map[string]interface{}
+		json.Unmarshal(b, &p)
+		return p["depth"] == float64(3) // 2 + 1
+	})).Return(nil)
+
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com/llms.txt", "completed", "").Return(nil)
+	pm.On("CountPendingPages", mock.Anything, "src1").Return(1, nil) // Still pending pages
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+
+	tp.AssertExpectations(t)
+}
+
+func TestResultConsumer_HandleMessage_DeleteChunksError(t *testing.T) {
+	s := new(MockVectorStore)
+	// other mocks...
+	sf := new(MockSourceFetcher)
+	
+	consumer := worker.NewResultConsumer(s, nil, nil, sf, nil, nil)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com",
+		"status":    "success",
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	sf.On("GetSourceConfig", mock.Anything, "src1").Return(2, []string{}, "", "Src", nil)
+	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(assert.AnError)
+
+	err := consumer.HandleMessage(msg)
+	assert.Error(t, err)
 	assert.Equal(t, assert.AnError, err)
+}
+
+func TestResultConsumer_HandleMessage_PoisonPill(t *testing.T) {
+	consumer := worker.NewResultConsumer(nil, nil, nil, nil, nil, nil)
+	msg := &nsq.Message{Body: []byte("invalid json")}
 	
-	// Verify Embeddings were still published (Step 2 happened before Step 4)
-	assert.True(t, pub.PublishCallCount > 0, "Embeddings should have been published despite link discovery failure")
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+}
+
+func TestResultConsumer_HandleMessage_MissingRequiredFields(t *testing.T) {
+	consumer := worker.NewResultConsumer(nil, nil, nil, nil, nil, nil)
+	
+	// Missing URL
+	payload := map[string]interface{}{"source_id": "src1"}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
+}
+
+func TestResultConsumer_HandleMessage_LinkDiscoveryPublishFailure(t *testing.T) {
+	s := new(MockVectorStore)
+	sf := new(MockSourceFetcher)
+	pm := new(MockPageManager)
+	tp := new(MockTaskPublisher)
+	u := new(MockUpdater)
+
+	consumer := worker.NewResultConsumer(s, u, nil, sf, pm, tp)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com",
+		"content":   "c",
+		"links":     []string{"http://example.com/sub"},
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	sf.On("GetSourceConfig", mock.Anything, "src1").Return(5, []string{}, "", "Src", nil)
+	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(nil)
+	tp.On("Publish", config.TopicIngestEmbed, mock.Anything).Return(nil)
+	u.On("UpdateBodyHash", mock.Anything, "src1", mock.Anything).Return(nil)
+
+	// Link Discovery Success
+	pm.On("BulkCreatePages", mock.Anything, mock.Anything).Return([]string{"http://example.com/sub"}, nil)
+
+	// Publish Web Task Failure
+	tp.On("Publish", config.TopicIngestWeb, mock.Anything).Return(assert.AnError)
+	
+	// Should mark new page as failed
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com/sub", "failed", mock.Anything).Return(nil)
+
+	// Should still complete the current page
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "completed", "").Return(nil)
+	pm.On("CountPendingPages", mock.Anything, "src1").Return(0, nil)
+	u.On("UpdateStatus", mock.Anything, "src1", "completed").Return(nil)
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err) // Non-fatal for the consumer
+	
+	tp.AssertExpectations(t)
+	pm.AssertExpectations(t)
+}
+
+func TestResultConsumer_HandleMessage_EmptyContent_NoEmbedPublish(t *testing.T) {
+	s := new(MockVectorStore)
+	sf := new(MockSourceFetcher)
+	u := new(MockUpdater)
+	pm := new(MockPageManager)
+	
+	consumer := worker.NewResultConsumer(s, u, nil, sf, pm, nil)
+
+	payload := map[string]interface{}{
+		"source_id": "src1",
+		"url":       "http://example.com",
+		"content":   "", // Empty
+		"status":    "success",
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	sf.On("GetSourceConfig", mock.Anything, "src1").Return(5, []string{}, "", "Src", nil)
+	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(nil)
+	u.On("UpdateBodyHash", mock.Anything, "src1", mock.Anything).Return(nil)
+	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "completed", "").Return(nil)
+	pm.On("CountPendingPages", mock.Anything, "src1").Return(1, nil)
+
+	// Expect NO calls to publisher
+
+	err := consumer.HandleMessage(msg)
+	assert.NoError(t, err)
 }

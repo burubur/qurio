@@ -95,3 +95,69 @@ func TestWeaviateStore_Integration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
 }
+
+func TestWeaviateStore_GetChunks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	s := testutils.NewIntegrationSuite(t)
+	s.Setup()
+	defer s.Teardown()
+
+	store := weaviate.NewStore(s.Weaviate)
+	ctx := context.Background()
+	err := store.EnsureSchema(ctx)
+	require.NoError(t, err)
+
+	sourceID := "src-pagination"
+	url := "http://example.com/long-page"
+
+	// 1. Create 15 chunks
+	for i := 0; i < 15; i++ {
+		chunk := worker.Chunk{
+			SourceID:   sourceID,
+			SourceURL:  url,
+			Content:    "Content",
+			ChunkIndex: i,
+			Type:       "web",
+			Vector:     []float32{0.1},
+		}
+		err := store.StoreChunk(ctx, chunk)
+		require.NoError(t, err)
+	}
+
+	// 2. Test GetChunks Pagination
+	// Page 1
+	chunks, err := store.GetChunks(ctx, sourceID, 10, 0)
+	require.NoError(t, err)
+	assert.Len(t, chunks, 10)
+
+	// Page 2
+	chunks, err = store.GetChunks(ctx, sourceID, 10, 10)
+	require.NoError(t, err)
+	assert.Len(t, chunks, 5)
+
+	// 3. Test GetChunksByURL (Sorted by index)
+	results, err := store.GetChunksByURL(ctx, url)
+	require.NoError(t, err)
+	assert.Len(t, results, 15)
+	
+	// Verify sort order
+	for i, res := range results {
+		// GetChunksByURL returns retrieval.SearchResult
+		// We expect metadata["chunkIndex"] to match i
+		idx, ok := res.Metadata["chunkIndex"].(int)
+		if !ok {
+			// Try float64
+			if f, ok := res.Metadata["chunkIndex"].(float64); ok {
+				idx = int(f)
+			}
+		}
+		assert.Equal(t, i, idx, "Chunk index mismatch at position %d", i)
+	}
+
+	// 4. Test CountChunksBySource
+	count, err := store.CountChunksBySource(ctx, sourceID)
+	require.NoError(t, err)
+	assert.Equal(t, 15, count)
+}

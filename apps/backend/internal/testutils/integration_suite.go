@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -166,5 +169,51 @@ func (s *IntegrationSuite) GetAppConfig() *config.Config {
 		WeaviateHost:   fmt.Sprintf("%s:%s", wHost, wPort.Port()),
 		WeaviateScheme: "http",
 		NSQDHost:       fmt.Sprintf("%s:%s", nHost, nPort.Port()),
+	}
+}
+
+func (s *IntegrationSuite) Logger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stdout, nil))
+}
+
+func (s *IntegrationSuite) GetNSQAddress() string {
+	ctx := context.Background()
+	host, _ := s.nsqContainer.Host(ctx)
+	port, _ := s.nsqContainer.MappedPort(ctx, "4150")
+	return fmt.Sprintf("%s:%s", host, port.Port())
+}
+
+func (s *IntegrationSuite) ConsumeOne(topic string) *nsq.Message {
+	var msg *nsq.Message
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	cfg := nsq.NewConfig()
+	consumer, err := nsq.NewConsumer(topic, "test-ch-"+topic, cfg)
+	require.NoError(s.T, err)
+
+	consumer.AddHandler(nsq.HandlerFunc(func(m *nsq.Message) error {
+		msg = m
+		wg.Done()
+		return nil
+	}))
+
+	err = consumer.ConnectToNSQD(s.GetNSQAddress())
+	require.NoError(s.T, err)
+	defer consumer.Stop()
+
+	// Wait with timeout
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		wg.Wait()
+	}()
+
+	select {
+	case <-c:
+		return msg
+	case <-time.After(5 * time.Second):
+		s.T.Fatalf("timeout waiting for message on topic %s", topic)
+		return nil
 	}
 }

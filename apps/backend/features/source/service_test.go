@@ -278,3 +278,65 @@ func TestService_Get_ExcludeChunks(t *testing.T) {
 	assert.Empty(t, detail.Chunks)
 	mockChunk.AssertNotCalled(t, "GetChunks")
 }
+
+func TestService_Upload_Success(t *testing.T) {
+	mockRepo := new(MockRepository)
+	mockPub := new(MockPublisher)
+	svc := NewService(mockRepo, mockPub, nil, nil)
+
+	path := "/tmp/file.pdf"
+	hash := "abc123hash"
+	name := "file.pdf"
+
+	// 1. Check duplicate
+	mockRepo.On("ExistsByHash", mock.Anything, hash).Return(false, nil)
+
+	// 2. Save
+	mockRepo.On("Save", mock.Anything, mock.MatchedBy(func(s *Source) bool {
+		return s.Status == "in_progress" && s.Type == "file" && s.ContentHash == hash && s.Name == name
+	})).Return(nil)
+
+	// 3. Publish
+	mockPub.On("Publish", config.TopicIngestFile, mock.Anything).Return(nil)
+
+	src, err := svc.Upload(context.Background(), path, hash, name)
+	assert.NoError(t, err)
+	assert.NotNil(t, src)
+	assert.Equal(t, "file", src.Type)
+	mockRepo.AssertExpectations(t)
+	mockPub.AssertExpectations(t)
+}
+
+func TestService_Upload_Duplicate(t *testing.T) {
+	mockRepo := new(MockRepository)
+	svc := NewService(mockRepo, nil, nil, nil)
+
+	mockRepo.On("ExistsByHash", mock.Anything, "hash").Return(true, nil)
+
+	_, err := svc.Upload(context.Background(), "path", "hash", "name")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Duplicate")
+}
+
+func TestService_List(t *testing.T) {
+	mockRepo := new(MockRepository)
+	svc := NewService(mockRepo, nil, nil, nil)
+
+	expected := []Source{{ID: "1"}, {ID: "2"}}
+	mockRepo.On("List", mock.Anything).Return(expected, nil)
+
+	result, err := svc.List(context.Background())
+	assert.NoError(t, err)
+	assert.Equal(t, expected, result)
+}
+
+func TestService_ResetStuckPages(t *testing.T) {
+	mockRepo := new(MockRepository)
+	svc := NewService(mockRepo, nil, nil, nil)
+
+	mockRepo.On("ResetStuckPages", mock.Anything, 5*time.Minute).Return(int64(5), nil)
+
+	err := svc.ResetStuckPages(context.Background())
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}

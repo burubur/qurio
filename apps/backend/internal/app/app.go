@@ -27,12 +27,18 @@ type App struct {
 	EmbedderConsumer *worker.EmbedderConsumer
 }
 
+type Options struct {
+	Embedder retrieval.Embedder
+	Reranker retrieval.Reranker
+}
+
 func New(
 	cfg *config.Config,
 	db Database,
 	vecStore VectorStore,
 	taskPub TaskPublisher,
 	logger *slog.Logger,
+	opts *Options,
 ) (*App, error) {
 	
 	// 5. Initialize Adapters & Services
@@ -100,9 +106,20 @@ func New(
 	// Feature: Stats
 	statsHandler := stats.NewHandler(sourceRepo, jobRepo, vecStore)
 
-	// Adapters: Dynamic
-	geminiEmbedder := gemini.NewDynamicEmbedder(settingsService)
-	rerankerClient := reranker.NewDynamicClient(settingsService)
+	// Adapters: Dynamic or Injected
+	var geminiEmbedder retrieval.Embedder
+	if opts != nil && opts.Embedder != nil {
+		geminiEmbedder = opts.Embedder
+	} else {
+		geminiEmbedder = gemini.NewDynamicEmbedder(settingsService)
+	}
+
+	var rerankerClient retrieval.Reranker
+	if opts != nil && opts.Reranker != nil {
+		rerankerClient = opts.Reranker
+	} else {
+		rerankerClient = reranker.NewDynamicClient(settingsService)
+	}
 
 	// Middleware: CORS
 	enableCORS := func(next http.HandlerFunc) http.HandlerFunc {

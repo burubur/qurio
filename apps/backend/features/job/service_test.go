@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"qurio/apps/backend/internal/config"
 )
 
@@ -60,6 +61,9 @@ func TestRetry_Timeout(t *testing.T) {
 }
 
 func (m *MockRepoService) Count(ctx context.Context) (int, error) { return 10, nil }
+func (m *MockRepoService) List(ctx context.Context) ([]Job, error) {
+	return []Job{{ID: "1"}, {ID: "2"}}, nil
+}
 
 func TestService_Count(t *testing.T) {
 	repo := &MockRepoService{}
@@ -73,6 +77,17 @@ func TestService_Count(t *testing.T) {
 	if count != 10 {
 		t.Errorf("Expected count 10, got %d", count)
 	}
+}
+
+func TestService_List(t *testing.T) {
+	repo := &MockRepoService{}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	service := NewService(repo, nil, logger)
+
+	jobs, err := service.List(context.Background())
+	assert.NoError(t, err)
+	assert.Len(t, jobs, 2)
+	assert.Equal(t, "1", jobs[0].ID)
 }
 
 func TestService_ResetStuckJobs(t *testing.T) {

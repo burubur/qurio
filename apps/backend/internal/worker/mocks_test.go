@@ -2,17 +2,14 @@ package worker_test
 
 import (
 	"context"
-	"encoding/json"
-	"testing"
 
-	"github.com/nsqio/go-nsq"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"qurio/apps/backend/features/job"
 	"qurio/apps/backend/internal/worker"
 )
 
 // Mocks
+
 type MockEmbedder struct { mock.Mock }
 func (m *MockEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	args := m.Called(ctx, text)
@@ -81,79 +78,7 @@ func (m *MockTaskPublisher) Publish(topic string, body []byte) error {
 	return args.Error(0)
 }
 
-func TestHandleMessage_Success(t *testing.T) {
-	// Setup Mocks
-	s := new(MockVectorStore)
-	u := new(MockUpdater)
-	j := new(MockJobRepo)
-	sf := new(MockSourceFetcher)
-	pm := new(MockPageManager)
-	tp := new(MockTaskPublisher)
-
-	consumer := worker.NewResultConsumer(s, u, j, sf, pm, tp)
-
-	// Payload
-	payload := map[string]interface{}{
-		"source_id": "src1",
-		"url": "http://example.com",
-		"content": "Some content",
-		"title": "Title",
-		"status": "success",
-	}
-	body, _ := json.Marshal(payload)
-	msg := &nsq.Message{Body: body}
-
-	// Expectations
-	sf.On("GetSourceConfig", mock.Anything, "src1").Return(2, []string{}, "", "My Source", nil)
-	s.On("DeleteChunksByURL", mock.Anything, "src1", "http://example.com").Return(nil)
-	
-	// Expect Publish instead of Embed/Store
-	tp.On("Publish", "ingest.embed", mock.Anything).Return(nil)
-
-	u.On("UpdateBodyHash", mock.Anything, "src1", mock.Anything).Return(nil)
-	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "completed", "").Return(nil)
-	pm.On("CountPendingPages", mock.Anything, "src1").Return(0, nil)
-	u.On("UpdateStatus", mock.Anything, "src1", "completed").Return(nil)
-
-	err := consumer.HandleMessage(msg)
-	assert.NoError(t, err)
-	
-	s.AssertExpectations(t)
-	pm.AssertExpectations(t)
-	tp.AssertExpectations(t)
-}
-
-func TestHandleMessage_Failure(t *testing.T) {
-	// Setup Mocks
-	s := new(MockVectorStore)
-	u := new(MockUpdater)
-	j := new(MockJobRepo)
-	sf := new(MockSourceFetcher)
-	pm := new(MockPageManager)
-	tp := new(MockTaskPublisher)
-
-	consumer := worker.NewResultConsumer(s, u, j, sf, pm, tp)
-
-	payload := map[string]interface{}{
-		"source_id": "src1",
-		"url": "http://example.com",
-		"status": "failed",
-		"error": "Some error",
-		"depth": 1,
-	}
-	body, _ := json.Marshal(payload)
-	msg := &nsq.Message{Body: body}
-
-	pm.On("UpdatePageStatus", mock.Anything, "src1", "http://example.com", "failed", "Some error").Return(nil)
-	// Depth 1 -> No UpdateStatus(failed) for source
-	// Save Failed Job? OriginalPayload is nil in this map, so maybe skipped?
-	// Payload struct has OriginalPayload json.RawMessage.
-	// If we provide it in map:
-	// "original_payload": {}
-	// Let's assume nil original payload for simplicity
-	
-	err := consumer.HandleMessage(msg)
-	assert.NoError(t, err)
-	
-	pm.AssertExpectations(t)
+// Helper to create a test context
+func NewTestContext() context.Context {
+	return context.Background()
 }

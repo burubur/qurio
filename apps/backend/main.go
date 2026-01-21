@@ -47,7 +47,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	defer deps.DB.Close()
 
 	// 3. Initialize App
-	application, err := app.New(cfg, deps.DB, deps.VectorStore, deps.NSQProducer, logger)
+	application, err := app.New(cfg, deps.DB, deps.VectorStore, deps.NSQProducer, logger, nil)
 	if err != nil {
 		return fmt.Errorf("failed to initialize app: %w", err)
 	}
