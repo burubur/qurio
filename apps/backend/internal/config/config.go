@@ -29,6 +29,10 @@ type Config struct {
 	GeminiAPIKey string `envconfig:"GEMINI_API_KEY"`
 	RerankAPIKey string `envconfig:"RERANK_API_KEY"`
 	NSQMaxMsgSize int64 `envconfig:"NSQ_MAX_MSG_SIZE" default:"10485760"` // 10MB
+
+	// Resilience
+	BootstrapRetryAttempts int `envconfig:"BOOTSTRAP_RETRY_ATTEMPTS" default:"10"`
+	BootstrapRetryDelaySeconds int `envconfig:"BOOTSTRAP_RETRY_DELAY_SECONDS" default:"2"`
 }
 
 func Load() (*Config, error) {

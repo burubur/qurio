@@ -218,29 +218,30 @@ func (h *ResultConsumer) HandleMessage(m *nsq.Message) error {
 				newURLs, err := h.pageManager.BulkCreatePages(ctx, newPages)
 				if err != nil {
 					slog.ErrorContext(ctx, "failed to bulk create pages", "error", err)
-				} else {
-					slog.InfoContext(ctx, "discovered new pages", "count", len(newURLs))
-					for _, newURL := range newURLs {
-						// Ensure tasks generated from llms.txt at maxDepth don't exceed maxDepth+1 endlessly
-						// Actually, DiscoverLinks sets new page depth as parent.Depth + 1.
-						// If parent is llms.txt (depth=maxDepth), child will be maxDepth+1.
-						// The child won't discover further links because its depth > maxDepth.
-						// This is exactly what we want (1 level deeper than max).
-						
-						taskPayload, _ := json.Marshal(map[string]interface{}{
-							"type":           "web",
-							"url":            newURL,
-							"id":             payload.SourceID,
-							"depth":          payload.Depth + 1,
-							"max_depth":      maxDepth,
-							"exclusions":     exclusions,
-							"gemini_api_key": apiKey,
-							"correlation_id": correlationID,
-						})
-						if err := h.publisher.Publish(config.TopicIngestWeb, taskPayload); err != nil {
-							slog.ErrorContext(ctx, "failed to publish task, marking page as failed", "error", err, "url", newURL)
-							_ = h.pageManager.UpdatePageStatus(ctx, payload.SourceID, newURL, "failed", fmt.Sprintf("Failed to publish task: %v", err))
-						}
+					return err
+				}
+
+				slog.InfoContext(ctx, "discovered new pages", "count", len(newURLs))
+				for _, newURL := range newURLs {
+					// Ensure tasks generated from llms.txt at maxDepth don't exceed maxDepth+1 endlessly
+					// Actually, DiscoverLinks sets new page depth as parent.Depth + 1.
+					// If parent is llms.txt (depth=maxDepth), child will be maxDepth+1.
+					// The child won't discover further links because its depth > maxDepth.
+					// This is exactly what we want (1 level deeper than max).
+					
+					taskPayload, _ := json.Marshal(map[string]interface{}{
+						"type":           "web",
+						"url":            newURL,
+						"id":             payload.SourceID,
+						"depth":          payload.Depth + 1,
+						"max_depth":      maxDepth,
+						"exclusions":     exclusions,
+						"gemini_api_key": apiKey,
+						"correlation_id": correlationID,
+					})
+					if err := h.publisher.Publish(config.TopicIngestWeb, taskPayload); err != nil {
+						slog.ErrorContext(ctx, "failed to publish task, marking page as failed", "error", err, "url", newURL)
+						_ = h.pageManager.UpdatePageStatus(ctx, payload.SourceID, newURL, "failed", fmt.Sprintf("Failed to publish task: %v", err))
 					}
 				}
 			} else if isManifest {

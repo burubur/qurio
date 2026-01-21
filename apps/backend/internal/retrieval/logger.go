@@ -5,20 +5,22 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
 type QueryLogEntry struct {
-	Timestamp   time.Time     `json:"timestamp"`
-	Query       string        `json:"query"`
-	NumResults  int           `json:"num_results"`
-	Duration    time.Duration `json:"duration_ns"`
-	LatencyMs   int64         `json:"latency_ms"`
-	CorrelationID string      `json:"correlation_id"`
+	Timestamp     time.Time     `json:"timestamp"`
+	Query         string        `json:"query"`
+	NumResults    int           `json:"num_results"`
+	Duration      time.Duration `json:"duration_ns"`
+	LatencyMs     int64         `json:"latency_ms"`
+	CorrelationID string        `json:"correlation_id"`
 }
 
 type QueryLogger struct {
 	writer io.Writer
+	mu     sync.Mutex
 }
 
 func NewQueryLogger(w io.Writer) *QueryLogger {
@@ -43,5 +45,8 @@ func NewFileQueryLogger(path string) (*QueryLogger, error) {
 func (l *QueryLogger) Log(entry QueryLogEntry) {
 	entry.Timestamp = time.Now()
 	entry.LatencyMs = entry.Duration.Milliseconds()
+	
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	json.NewEncoder(l.writer).Encode(entry)
 }

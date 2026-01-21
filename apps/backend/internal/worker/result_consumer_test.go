@@ -48,8 +48,12 @@ func (m *MockSourceFetcher) GetSourceConfig(ctx context.Context, id string) (int
 
 type MockPageManager struct{
 	ReturnURLs []string
+	ReturnErr  error
 }
 func (m *MockPageManager) BulkCreatePages(ctx context.Context, pages []PageDTO) ([]string, error) {
+	if m.ReturnErr != nil {
+		return nil, m.ReturnErr
+	}
 	if len(m.ReturnURLs) > 0 {
 		return m.ReturnURLs, nil
 	}
@@ -175,4 +179,38 @@ func TestResultConsumer_UsesConfiguredName(t *testing.T) {
 	var published IngestEmbedPayload
 	json.Unmarshal(pub.LastBody, &published)
 	assert.Equal(t, "test-source", published.SourceName)
+}
+
+func TestResultConsumer_HandleMessage_PartialFailure_BulkCreatePages(t *testing.T) {
+	// Setup dependencies
+	store := &MockStore{}
+	pub := &MockPublisher{}
+	
+	// Mock PageManager to fail on BulkCreatePages
+	pm := &MockPageManager{
+		ReturnErr: assert.AnError,
+	}
+	
+	consumer := NewResultConsumer(store, &MockUpdater{}, &MockJobRepo{}, &MockSourceFetcher{}, pm, pub)
+
+	// Payload with discovered links
+	payload := map[string]interface{}{
+		"source_id": "src-1",
+		"content":   "test content",
+		"url":       "http://example.com",
+		"links":     []string{"http://example.com/page2"},
+		"depth":     0,
+	}
+	body, _ := json.Marshal(payload)
+	msg := &nsq.Message{Body: body}
+
+	// Execution
+	err := consumer.HandleMessage(msg)
+
+	// Assertion
+	assert.Error(t, err, "Expected error when BulkCreatePages fails")
+	assert.Equal(t, assert.AnError, err)
+	
+	// Verify Embeddings were still published (Step 2 happened before Step 4)
+	assert.True(t, pub.PublishCallCount > 0, "Embeddings should have been published despite link discovery failure")
 }

@@ -63,3 +63,19 @@ func TestClient_Rerank_None(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, []int{0, 1}, indices)
 }
+
+func TestClient_Rerank_ErrorHandling(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"detail":"invalid query"}`))
+	}))
+	defer ts.Close()
+
+	client := reranker.NewClient("jina", "k1")
+	client.SetBaseURL(ts.URL)
+
+	_, err := client.Rerank(context.Background(), "q", []string{"d1"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "jina api error: 400")
+	assert.Contains(t, err.Error(), `{"detail":"invalid query"}`)
+}

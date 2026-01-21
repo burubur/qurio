@@ -37,12 +37,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	}
 
 	// Retry loop
-	for i := 0; i < 10; i++ {
+	retryDelay := time.Duration(cfg.BootstrapRetryDelaySeconds) * time.Second
+	for i := 0; i < cfg.BootstrapRetryAttempts; i++ {
 		if err := db.Ping(); err == nil {
 			break
 		}
 		slog.Warn("failed to ping db, retrying...", "attempt", i+1)
-		time.Sleep(2 * time.Second)
+		time.Sleep(retryDelay)
 	}
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping db: %w", err)
@@ -74,7 +75,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config) (*Dependencies, error) {
 	vecStore := wstore.NewStore(wClient)
 	
 	// Ensure Schema Retry
-	if err := EnsureSchemaWithRetry(ctx, vecStore, 10, 2*time.Second); err != nil {
+	if err := EnsureSchemaWithRetry(ctx, vecStore, cfg.BootstrapRetryAttempts, retryDelay); err != nil {
 		return nil, fmt.Errorf("weaviate schema error: %w", err)
 	}
 

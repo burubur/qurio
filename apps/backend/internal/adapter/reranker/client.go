@@ -55,7 +55,10 @@ func (c *Client) rerankJina(ctx context.Context, query string, docs []string) ([
 		"documents": docs,
 	}
 
-	jsonBody, _ := json.Marshal(reqBody)
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, err
@@ -71,7 +74,9 @@ func (c *Client) rerankJina(ctx context.Context, query string, docs []string) ([
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("jina api error: %d", resp.StatusCode)
+		var bodyBytes bytes.Buffer
+		_, _ = bodyBytes.ReadFrom(resp.Body)
+		return nil, fmt.Errorf("jina api error: %d, body: %s", resp.StatusCode, bodyBytes.String())
 	}
 
 	var result struct {
@@ -109,7 +114,10 @@ func (c *Client) rerankCohere(ctx context.Context, query string, docs []string) 
 		"return_documents": false,
 	}
 
-	jsonBody, _ := json.Marshal(reqBody)
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, err
@@ -125,7 +133,9 @@ func (c *Client) rerankCohere(ctx context.Context, query string, docs []string) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("cohere api error: %d", resp.StatusCode)
+		var bodyBytes bytes.Buffer
+		_, _ = bodyBytes.ReadFrom(resp.Body)
+		return nil, fmt.Errorf("cohere api error: %d, body: %s", resp.StatusCode, bodyBytes.String())
 	}
 
 	var result struct {

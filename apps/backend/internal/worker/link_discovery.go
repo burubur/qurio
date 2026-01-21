@@ -20,6 +20,11 @@ func DiscoverLinks(sourceID, host string, links []string, currentDepth, maxDepth
 			continue
 		}
 
+		// Scheme Check
+		if linkU.Scheme != "http" && linkU.Scheme != "https" {
+			continue
+		}
+
 		// Normalize: Strip Fragment
 		linkU.Fragment = ""
 		normalizedLink := linkU.String()
