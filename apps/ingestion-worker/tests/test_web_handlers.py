@@ -38,7 +38,7 @@ if 'handlers.web' in sys.modules:
 async def test_handle_web_task_returns_title():
     from handlers.web import handle_web_task
     # Mock crawler
-    mock_crawler = MagicMock()
+    mock_crawler = AsyncMock()
     
     async def side_effect(url, config=None):
         res = MagicMock()
@@ -53,14 +53,7 @@ async def test_handle_web_task_returns_title():
 
     mock_crawler.arun.side_effect = side_effect
     
-    # Context manager mock
-    mock_crawler_cm = AsyncMock()
-    mock_crawler_cm.__aenter__.return_value = mock_crawler
-    mock_crawler_cm.__aexit__.return_value = None
-    
-    mock_factory = MagicMock(return_value=mock_crawler_cm)
-    
-    result = await handle_web_task("http://example.com", crawler_factory=mock_factory)
+    result = await handle_web_task("http://example.com", crawler=mock_crawler)
     
     assert isinstance(result, list)
     assert len(result) == 1
@@ -71,7 +64,7 @@ async def test_handle_web_task_returns_title():
 async def test_handle_web_task_success():
     from handlers.web import handle_web_task
     # Mock crawler
-    mock_crawler = MagicMock()
+    mock_crawler = AsyncMock()
 
     async def side_effect(url, config=None):
         res = MagicMock()
@@ -86,14 +79,7 @@ async def test_handle_web_task_success():
 
     mock_crawler.arun.side_effect = side_effect
     
-    # Context manager mock
-    mock_crawler_cm = AsyncMock()
-    mock_crawler_cm.__aenter__.return_value = mock_crawler
-    mock_crawler_cm.__aexit__.return_value = None
-    
-    mock_factory = MagicMock(return_value=mock_crawler_cm)
-    
-    result = await handle_web_task("http://example.com", crawler_factory=mock_factory)
+    result = await handle_web_task("http://example.com", crawler=mock_crawler)
     
     assert isinstance(result, list), "Expected list, got something else"
     assert len(result) == 1
@@ -110,20 +96,11 @@ async def test_handle_web_task_failure():
     mock_result.error_message = "Failed"
     
     # Mock crawler
-    mock_crawler = MagicMock()
-    f = asyncio.Future()
-    f.set_result(mock_result)
-    mock_crawler.arun.return_value = f
-    
-    # Context manager mock
-    mock_crawler_cm = AsyncMock()
-    mock_crawler_cm.__aenter__.return_value = mock_crawler
-    mock_crawler_cm.__aexit__.return_value = None
-    
-    mock_factory = MagicMock(return_value=mock_crawler_cm)
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
     
     with pytest.raises(Exception, match="Crawl failed: Failed"):
-        await handle_web_task("http://example.com", crawler_factory=mock_factory)
+        await handle_web_task("http://example.com", crawler=mock_crawler)
 
 @pytest.mark.asyncio
 async def test_handle_web_task_internal_links():
@@ -142,18 +119,10 @@ async def test_handle_web_task_internal_links():
     }
     
     # Mock crawler
-    mock_crawler = MagicMock()
-    f = asyncio.Future()
-    f.set_result(mock_result)
-    mock_crawler.arun.return_value = f
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
     
-    mock_crawler_cm = AsyncMock()
-    mock_crawler_cm.__aenter__.return_value = mock_crawler
-    mock_crawler_cm.__aexit__.return_value = None
-    
-    mock_factory = MagicMock(return_value=mock_crawler_cm)
-    
-    result = await handle_web_task("http://example.com/page1", crawler_factory=mock_factory)
+    result = await handle_web_task("http://example.com/page1", crawler=mock_crawler)
     
     links = result[0]["links"]
     assert "http://example.com/page2" in links
@@ -168,20 +137,12 @@ async def test_handle_web_task_auth_precedence():
     mock_result.url = "http://example.com"
     mock_result.links = {}
 
-    mock_crawler = MagicMock()
-    f = asyncio.Future()
-    f.set_result(mock_result)
-    mock_crawler.arun.return_value = f
+    mock_crawler = AsyncMock()
+    mock_crawler.arun.return_value = mock_result
     
-    mock_crawler_cm = AsyncMock()
-    mock_crawler_cm.__aenter__.return_value = mock_crawler
-    mock_crawler_cm.__aexit__.return_value = None
-
-    mock_factory = MagicMock(return_value=mock_crawler_cm)
-
     import handlers.web
     with patch('handlers.web.LLMConfig') as MockLLMConfig:
-         await handle_web_task("http://example.com", api_key="custom-key", crawler_factory=mock_factory)
+         await handle_web_task("http://example.com", api_key="custom-key", crawler=mock_crawler)
          
          # Verify LLMConfig initialized with custom key
          MockLLMConfig.assert_called_with(
