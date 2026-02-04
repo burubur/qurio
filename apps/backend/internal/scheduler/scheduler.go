@@ -3,9 +3,10 @@ package scheduler
 import (
 	"context"
 	"log/slog"
+	"qurio/apps/backend/features/source"
 	"time"
 
-	"qurio/apps/backend/features/source"
+	"github.com/robfig/cron/v3"
 )
 
 type Scheduler struct {
@@ -71,22 +72,33 @@ func (s *Scheduler) checkAndSync(ctx context.Context) {
 
 func (s *Scheduler) isDue(src source.Source) bool {
 	if src.LastSyncedAt == nil {
-		return true // Never synced, sync now? Or wait? Let's say sync now.
+		return true
 	}
 
 	last := *src.LastSyncedAt
 	now := time.Now()
 
-	switch src.SyncSchedule {
+	scheduleStr := src.SyncSchedule
+	// Legacy mapping
+	switch scheduleStr {
 	case "minute":
-		return now.Sub(last) >= time.Minute
+		scheduleStr = "* * * * *"
 	case "hourly":
-		return now.Sub(last) >= time.Hour
+		scheduleStr = "@hourly"
 	case "daily":
-		return now.Sub(last) >= 24*time.Hour
-	// Add more intervals if needed
-	default:
-		// Default daily
+		scheduleStr = "@daily"
+	case "":
+		scheduleStr = "@daily" // Default
+	}
+
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	schedule, err := parser.Parse(scheduleStr)
+	if err != nil {
+		slog.Warn("Scheduler: invalid cron schedule, fallback to daily", "schedule", scheduleStr, "error", err)
+		// Fallback to daily
 		return now.Sub(last) >= 24*time.Hour
 	}
+
+	nextSyncTime := schedule.Next(last)
+	return now.After(nextSyncTime)
 }

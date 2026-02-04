@@ -2,14 +2,19 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"qurio/apps/backend/features/source"
 	"qurio/apps/backend/internal/retrieval"
+
+	"github.com/google/uuid"
 )
 
 type Retriever interface {
@@ -20,11 +25,12 @@ type Retriever interface {
 type SourceManager interface {
 	List(ctx context.Context) ([]source.Source, error)
 	GetPages(ctx context.Context, id string) ([]source.SourcePage, error)
+	Upload(ctx context.Context, path string, hash string, name string) (*source.Source, error)
 }
 
 type Handler struct {
-	retriever    Retriever
-	sourceMgr    SourceManager
+	retriever Retriever
+	sourceMgr SourceManager
 }
 
 func NewHandler(r Retriever, s SourceManager) *Handler {
@@ -127,7 +133,7 @@ func (h *Handler) processRequest(ctx context.Context, req JSONRPCRequest) *JSONR
 			Result: ListToolsResult{
 				Tools: []Tool{
 					{
-						Name:        "qurio_search",
+						Name: "qurio_search",
 						Description: `Search & Exploration tool. Performs a hybrid search (Keyword + Vector). Use this for specific questions, finding code snippets, or exploring topics across known sources.
 
 ARGUMENT GUIDE:
@@ -183,7 +189,7 @@ USAGE EXAMPLES:
 						},
 					},
 					{
-						Name:        "qurio_list_sources",
+						Name: "qurio_list_sources",
 						Description: `Discovery tool. Lists all available documentation sets (sources) currently indexed. Use this at the start of a session to understand what documentation is available.
 
 USAGE EXAMPLE:
@@ -194,7 +200,7 @@ qurio_list_sources()`,
 						},
 					},
 					{
-						Name:        "qurio_list_pages",
+						Name: "qurio_list_pages",
 						Description: `Navigation tool. Lists all individual pages/documents within a specific source. Use this to find the exact URL of a document when a search query is too broad or to browse the table of contents.
 
 USAGE EXAMPLE:
@@ -211,7 +217,7 @@ qurio_list_pages(source_id="src_stripe_api")`,
 						},
 					},
 					{
-						Name:        "qurio_read_page",
+						Name: "qurio_read_page",
 						Description: `Deep Reading / Full Context tool. Retrieves the *entire* content of a specific page or document by its URL. Use this when a search result snippet is truncated or insufficient, or when you need to read a full guide/tutorial. Crucial: Always prefer this over guessing content if the search result is incomplete.
 
 USAGE EXAMPLE:
@@ -225,6 +231,32 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 								},
 							},
 							"required": []string{"url"},
+						},
+					},
+					{
+						Name: "qurio_ingest",
+						Description: `Ingestion tool. Ingests raw content (HTML, Text, Markdown) directly into Qurio's knowledge base. This is useful for saving context from other tools or conversations. The content is saved as a file and processed by the standard ingestion pipeline.
+
+USAGE EXAMPLE:
+qurio_ingest(content="# My Note\nImportant info...", name="meeting_notes_2024", format="md")`,
+						InputSchema: map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"content": map[string]interface{}{
+									"type":        "string",
+									"description": "The raw content to ingest.",
+								},
+								"name": map[string]interface{}{
+									"type":        "string",
+									"description": "A descriptive name for the source (e.g. 'Confluence - Project Alpha').",
+								},
+								"format": map[string]interface{}{
+									"type":        "string",
+									"description": "The format of the content. Supported: 'html', 'md', 'txt', 'json'. Default: 'txt'.",
+									"enum":        []interface{}{"html", "md", "txt", "json"},
+								},
+							},
+							"required": []string{"content", "name"},
 						},
 					},
 				},
@@ -256,7 +288,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid search arguments")
 				return &resp
 			}
-			
+
 			if args.Query == "" {
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Query is required")
 				return &resp
@@ -285,7 +317,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInternal, "Search failed: "+err.Error())
 				return &resp
 			}
-			
+
 			var textResult string
 			if len(results) == 0 {
 				textResult = "No results found."
@@ -305,9 +337,9 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					if res.SourceID != "" {
 						textResult += fmt.Sprintf("SourceID: %s\n", res.SourceID)
 					}
-					
+
 					textResult += fmt.Sprintf("Content:\n%s\n", res.Content)
-					
+
 					// Optional: Show other metadata
 					// if len(res.Metadata) > 0 {
 					// 	meta, _ := json.Marshal(res.Metadata)
@@ -315,7 +347,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 					// }
 					textResult += "\n---\n"
 				}
-				
+
 				textResult += "\nUse qurio_read_page(url=\"...\") to read the full content of any result.\n"
 			}
 
@@ -364,7 +396,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				Type string `json:"type"`
 				URL  string `json:"url"`
 			}
-			
+
 			simpleSources := make([]SimpleSource, len(sources))
 			for i, s := range sources {
 				name := s.Name
@@ -413,7 +445,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
 				return &resp
 			}
-			
+
 			if args.SourceID == "" {
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "source_id is required")
 				return &resp
@@ -448,7 +480,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				ID  string `json:"id"`
 				URL string `json:"url"`
 			}
-			
+
 			simplePages := make([]SimplePage, len(pages))
 			for i, p := range pages {
 				simplePages[i] = SimplePage{
@@ -488,7 +520,7 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
 				return &resp
 			}
-			
+
 			if args.URL == "" {
 				resp := makeErrorResponse(req.ID, ErrInvalidParams, "URL is required")
 				return &resp
@@ -537,12 +569,108 @@ read_page(url="https://docs.stripe.com/webhooks/signatures")`,
 				},
 			}
 		}
-		
+
+		if params.Name == "qurio_ingest" {
+			type IngestArgs struct {
+				Content string `json:"content"`
+				Name    string `json:"name"`
+				Format  string `json:"format"`
+			}
+			var args IngestArgs
+			if err := json.Unmarshal(params.Arguments, &args); err != nil {
+				slog.Warn("invalid ingest arguments", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Invalid arguments")
+				return &resp
+			}
+
+			if args.Content == "" || args.Name == "" {
+				resp := makeErrorResponse(req.ID, ErrInvalidParams, "Content and Name are required")
+				return &resp
+			}
+
+			// Default format
+			if args.Format == "" {
+				args.Format = "txt"
+			}
+
+			// Normalize extension
+			ext := "." + args.Format
+			if args.Format == "markdown" {
+				ext = ".md"
+			}
+
+			// 1. Create uploads directory
+			uploadDir := os.Getenv("QURIO_UPLOAD_DIR")
+			if uploadDir == "" {
+				uploadDir = "./uploads"
+			}
+			// Ensure absolute path if needed, or relative to CWD.
+			// Ideally we use a consistent location.
+			if err := os.MkdirAll(uploadDir, 0755); err != nil {
+				slog.Error("failed to create upload dir", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInternal, "Failed to create upload directory")
+				return &resp
+			}
+
+			// 2. Generate filename
+			cleanName := args.Name // In real world should sanitize this
+			filename := fmt.Sprintf("mcp_%s_%s%s", uuid.New().String(), cleanName, ext)
+			path := filepath.Join(uploadDir, filename)
+
+			// 3. Save file and Hash
+			f, err := os.Create(path)
+			if err != nil {
+				slog.Error("failed to create file", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInternal, "Failed to save content")
+				return &resp
+			}
+
+			hash := sha256.New()
+			mw := io.MultiWriter(f, hash)
+
+			if _, err := io.WriteString(mw, args.Content); err != nil {
+				f.Close()
+				slog.Error("failed to write content", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInternal, "Failed to write content")
+				return &resp
+			}
+			f.Close()
+
+			fileHash := fmt.Sprintf("%x", hash.Sum(nil))
+
+			// 4. Call Source Service
+			src, err := h.sourceMgr.Upload(ctx, path, fileHash, args.Name)
+			if err != nil {
+				// Cleanup
+				os.Remove(path)
+
+				if err.Error() == "Duplicate detected" {
+					resp := makeErrorResponse(req.ID, -32000, "Source already exists (same content).")
+					return &resp
+				}
+				slog.Error("ingest failed", "error", err)
+				resp := makeErrorResponse(req.ID, ErrInternal, "Ingestion failed: "+err.Error())
+				return &resp
+			}
+
+			slog.Info("tool execution completed", "tool", "qurio_ingest", "id", src.ID)
+
+			return &JSONRPCResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result: ToolResult{
+					Content: []ToolContent{
+						{Type: "text", Text: fmt.Sprintf("Successfully submitted for ingestion.\nSource ID: %s\nStatus: %s", src.ID, src.Status)},
+					},
+				},
+			}
+		}
+
 		slog.Warn("method not found", "method", params.Name)
 		resp := makeErrorResponse(req.ID, ErrMethodNotFound, "Method not found: "+params.Name)
 		return &resp
 	}
-	
+
 	slog.Warn("unknown jsonrpc method", "method", req.Method)
 	resp := makeErrorResponse(req.ID, ErrMethodNotFound, "Method not found")
 	return &resp
@@ -597,7 +725,7 @@ func (h *Handler) writeError(w http.ResponseWriter, id interface{}, code int, me
 	// However, the helper above `writeError` was defined at file level? No, it's a method.
 	// Let's check if it's already defined in this file. It was in the previous version.
 	// I will just call it.
-	
+
 	resp := makeErrorResponse(id, code, message)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		slog.Error("failed to write error response", "error", err)

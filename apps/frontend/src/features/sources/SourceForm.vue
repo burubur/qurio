@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useSourceStore } from "./source.store";
 import { useSettingsStore } from "@/features/settings/settings.store";
@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import cronstrue from "cronstrue";
 
 const store = useSourceStore();
 const settingsStore = useSettingsStore();
@@ -34,7 +35,22 @@ const url = ref("");
 const maxDepth = ref(0);
 const exclusions = ref("");
 const syncEnabled = ref(false);
-const syncSchedule = ref("daily");
+const syncSchedule = ref("@hourly");
+const syncType = ref("@hourly");
+
+watch(syncType, (newVal) => {
+  if (newVal !== "custom") {
+    syncSchedule.value = newVal;
+  }
+});
+
+const cronDescription = computed(() => {
+  try {
+    return cronstrue.toString(syncSchedule.value);
+  } catch {
+    return "Invalid cron expression";
+  }
+});
 const showAdvanced = ref(false);
 const activeTab = ref<"web" | "file">("web");
 const file = ref<File | null>(null);
@@ -93,7 +109,8 @@ async function submit() {
       maxDepth.value = 0;
       exclusions.value = "";
       syncEnabled.value = false;
-      syncSchedule.value = "daily";
+      syncSchedule.value = "@hourly";
+      syncType.value = "@hourly";
       showAdvanced.value = false;
       emit("submit");
     }
@@ -319,66 +336,35 @@ function onDrop(e: DragEvent) {
                   >Sync Frequency</label
                 >
                 <select
-                  v-model="syncSchedule"
+                  v-model="syncType"
                   class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="minute">Every Minute (High Load)</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily (Recommended)</option>
+                  <option value="* * * * *">Every Minute (High Load)</option>
+                  <option value="@hourly">Hourly</option>
+                  <option value="@daily">Daily (Recommended)</option>
+                  <option value="custom">Custom (Cron)</option>
                 </select>
-              </div>
-            </div>
 
-            <!-- Synchronization Settings -->
-            <div class="space-y-4 pt-2 border-t border-border/50 md:col-span-2">
-              <h4
-                class="text-sm font-semibold text-foreground flex items-center gap-2"
-              >
-                <Database class="h-4 w-4" /> Synchronization
-              </h4>
-
-              <div
-                class="flex items-center justify-between p-4 bg-background/50 rounded-lg border border-border/50"
-              >
-                <div class="space-y-0.5">
-                  <label
-                    class="text-sm font-medium leading-none text-foreground block"
-                    >Auto-Sync</label
+                <div
+                  v-if="syncType === 'custom'"
+                  class="space-y-2 animate-in slide-in-from-top-1 fade-in duration-200"
+                >
+                  <label class="text-sm font-medium leading-none text-foreground"
+                    >Cron Expression</label
                   >
+                  <Input
+                    v-model="syncSchedule"
+                    type="text"
+                    placeholder="0 0 * * * (every midnight)"
+                    class="font-mono"
+                  />
                   <p class="text-xs text-muted-foreground">
-                    Automatically re-crawl this source
+                    Format: minute hour day month weekday
+                  </p>
+                  <p class="text-sm font-medium text-primary">
+                    {{ cronDescription }}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                  :class="syncEnabled ? 'bg-primary' : 'bg-input'"
-                  @click="syncEnabled = !syncEnabled"
-                >
-                  <span class="sr-only">Use setting</span>
-                  <span
-                    aria-hidden="true"
-                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out"
-                    :class="syncEnabled ? 'translate-x-5' : 'translate-x-0'"
-                  />
-                </button>
-              </div>
-
-              <div
-                v-if="syncEnabled"
-                class="space-y-2 animate-in slide-in-from-top-1 fade-in duration-200"
-              >
-                <label class="text-sm font-medium leading-none text-foreground"
-                  >Sync Frequency</label
-                >
-                <select
-                  v-model="syncSchedule"
-                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="minute">Every Minute (High Load)</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily (Recommended)</option>
-                </select>
               </div>
             </div>
           </div>
