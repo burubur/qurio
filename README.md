@@ -144,6 +144,7 @@ Once connected, your agent will have access to the following tools:
 | `qurio_list_sources` | **List all available data sources.** Useful to see what documentation is currently indexed. |
 | `qurio_list_pages` | **List pages within a source.** Helpful for exploring the structure of a documentation site. |
 | `qurio_read_page` | **Read a full page.** Retrieves the complete content of a specific document or web page found via search or listing. |
+| `qurio_ingest` | **Ingest raw content directly.** Allows agents to push content (HTML, Markdown, Text, JSON) into Qurio's knowledge base programmatically. Useful for saving context from other tools. |
 
 ### 5. Roadmap
 - [x] Rework crawler & embedder parallelization
