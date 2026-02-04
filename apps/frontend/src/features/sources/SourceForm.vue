@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useSourceStore } from './source.store'
-import { useSettingsStore } from '@/features/settings/settings.store'
-import { Plus, Loader2, ChevronDown, ChevronUp, Globe, FileUp, Settings2, UploadCloud } from 'lucide-vue-next'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { useSourceStore } from "./source.store";
+import { useSettingsStore } from "@/features/settings/settings.store";
+import {
+  Plus,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  FileUp,
+  Settings2,
+  UploadCloud,
+  Database,
+} from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -14,135 +24,146 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 
+const store = useSourceStore();
+const settingsStore = useSettingsStore();
+const router = useRouter();
+const name = ref("");
+const url = ref("");
+const maxDepth = ref(0);
+const exclusions = ref("");
+const syncEnabled = ref(false);
+const syncSchedule = ref("daily");
+const showAdvanced = ref(false);
+const activeTab = ref<"web" | "file">("web");
+const file = ref<File | null>(null);
+const isDragging = ref(false);
+const showApiKeyAlert = ref(false);
+const validationError = ref<string | null>(null);
 
-const store = useSourceStore()
-const settingsStore = useSettingsStore()
-const router = useRouter()
-const name = ref('')
-const url = ref('')
-const maxDepth = ref(0)
-const exclusions = ref('')
-const showAdvanced = ref(false)
-const activeTab = ref<'web' | 'file'>('web')
-const file = ref<File | null>(null)
-const isDragging = ref(false)
-const showApiKeyAlert = ref(false)
-const validationError = ref<string | null>(null)
-
-const emit = defineEmits(['submit'])
+const emit = defineEmits(["submit"]);
 
 async function submit() {
-  validationError.value = null
-  
+  validationError.value = null;
+
   // Check Gemini API Key before proceeding
   if (!settingsStore.geminiApiKey) {
-    showApiKeyAlert.value = true
-    return
+    showApiKeyAlert.value = true;
+    return;
   }
-  
-  // Ensure dialog is closed if key is present
-  showApiKeyAlert.value = false
 
-  if (activeTab.value === 'web') {
+  // Ensure dialog is closed if key is present
+  showApiKeyAlert.value = false;
+
+  if (activeTab.value === "web") {
     if (!name.value) {
-      validationError.value = 'Source Name is required'
-      return
+      validationError.value = "Source Name is required";
+      return;
     }
     if (!url.value) {
-      validationError.value = 'URL is required'
-      return
+      validationError.value = "URL is required";
+      return;
     }
-    
+
     try {
-      new URL(url.value)
+      new URL(url.value);
     } catch {
-      alert('Please enter a valid URL (e.g., https://docs.example.com)')
-      return
+      alert("Please enter a valid URL (e.g., https://docs.example.com)");
+      return;
     }
 
     const exclusionsList = exclusions.value
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
 
     await store.addSource({
-      name: name.value, 
+      name: name.value,
       url: url.value,
       max_depth: maxDepth.value,
-      exclusions: exclusionsList
-    })
+      exclusions: exclusionsList,
+      sync_enabled: syncEnabled.value,
+      sync_schedule: syncSchedule.value,
+    });
 
     if (!store.error) {
-      name.value = ''
-      url.value = ''
-      maxDepth.value = 0
-      exclusions.value = ''
-      showAdvanced.value = false
-      emit('submit')
+      name.value = "";
+      url.value = "";
+      maxDepth.value = 0;
+      exclusions.value = "";
+      syncEnabled.value = false;
+      syncSchedule.value = "daily";
+      showAdvanced.value = false;
+      emit("submit");
     }
   } else {
     if (file.value) {
       if (!name.value) {
-        validationError.value = 'Source Name is required'
-        return
+        validationError.value = "Source Name is required";
+        return;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const filePayload = file.value as any
-      await store.uploadSource(filePayload, name.value)
+      const filePayload = file.value as any;
+      await store.uploadSource(filePayload, name.value);
       if (!store.error) {
-        name.value = ''
-        file.value = null
-        emit('submit')
+        name.value = "";
+        file.value = null;
+        emit("submit");
       }
     }
   }
 }
 
 function goToSettings() {
-  showApiKeyAlert.value = false
-  router.push('/settings')
+  showApiKeyAlert.value = false;
+  router.push("/settings");
 }
 
 function onFileChange(e: Event) {
-  const target = e.target as HTMLInputElement
+  const target = e.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
-    file.value = target.files[0] || null
+    file.value = target.files[0] || null;
   }
 }
 
 function onDrop(e: DragEvent) {
-  isDragging.value = false
-  const droppedFiles = e.dataTransfer?.files
+  isDragging.value = false;
+  const droppedFiles = e.dataTransfer?.files;
   if (droppedFiles && droppedFiles.length > 0) {
-    file.value = droppedFiles[0] || null
+    file.value = droppedFiles[0] || null;
   }
 }
 </script>
 
 <template>
-  <div class="w-full bg-card border border-border rounded-xl shadow-sm overflow-hidden transition-all duration-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.05)]">
+  <div
+    class="w-full bg-card border border-border rounded-xl shadow-sm overflow-hidden transition-all duration-300 hover:shadow-[0_0_20px_rgba(59,130,246,0.05)]"
+  >
     <!-- Tab Navigation -->
     <div class="flex border-b border-border">
-      <button 
+      <button
         class="flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200"
-        :class="activeTab === 'web' 
-          ? 'bg-background text-primary border-b-2 border-primary' 
-          : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground'"
+        :class="
+          activeTab === 'web'
+            ? 'bg-background text-primary border-b-2 border-primary'
+            : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+        "
         @click="activeTab = 'web'"
       >
-        <Globe class="h-4 w-4" /> 
+        <Globe class="h-4 w-4" />
         <span>Web Crawler</span>
       </button>
-      <button 
+      <button
         class="flex-1 py-4 text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200"
-        :class="activeTab === 'file' 
-          ? 'bg-background text-primary border-b-2 border-primary' 
-          : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground'"
+        :class="
+          activeTab === 'file'
+            ? 'bg-background text-primary border-b-2 border-primary'
+            : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+        "
         @click="activeTab = 'file'"
       >
-        <FileUp class="h-4 w-4" /> 
+        <FileUp class="h-4 w-4" />
         <span>File Upload</span>
       </button>
     </div>
@@ -152,36 +173,48 @@ function onDrop(e: DragEvent) {
       <div v-if="activeTab === 'web'" class="space-y-6">
         <div class="flex flex-col space-y-4">
           <div class="space-y-2">
-            <label class="text-sm font-medium leading-none text-foreground">Source Name</label>
+            <label class="text-sm font-medium leading-none text-foreground"
+              >Source Name</label
+            >
             <div class="relative group">
-              <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <FileUp class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <div
+                class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"
+              >
+                <FileUp
+                  class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors"
+                />
               </div>
-              <Input 
-                v-model="name" 
-                type="text" 
-                placeholder="e.g., Company Documentation" 
-                :disabled="store.isLoading" 
+              <Input
+                v-model="name"
+                type="text"
+                placeholder="e.g., Company Documentation"
+                :disabled="store.isLoading"
                 class="pl-12 h-14 text-lg font-mono bg-background/50 focus:bg-background transition-all shadow-sm border-muted-foreground/20 focus:border-primary"
               />
             </div>
           </div>
           <div class="space-y-2">
-            <label class="text-sm font-medium leading-none text-foreground">Source Link</label>
+            <label class="text-sm font-medium leading-none text-foreground"
+              >Source Link</label
+            >
             <div class="relative group">
-              <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Globe class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <div
+                class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"
+              >
+                <Globe
+                  class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors"
+                />
               </div>
-              <Input 
-                v-model="url" 
-                type="text" 
-                placeholder="https://docs.example.com" 
-                :disabled="store.isLoading" 
+              <Input
+                v-model="url"
+                type="text"
+                placeholder="https://docs.example.com"
+                :disabled="store.isLoading"
                 class="pl-12 h-14 text-lg font-mono bg-background/50 focus:bg-background transition-all shadow-sm border-muted-foreground/20 focus:border-primary"
               />
             </div>
           </div>
-          
+
           <Button
             type="submit"
             :disabled="store.isLoading"
@@ -201,7 +234,9 @@ function onDrop(e: DragEvent) {
               @click="showAdvanced = !showAdvanced"
             >
               <Settings2 class="h-4 w-4" />
-              <span>{{ showAdvanced ? 'Hide Configuration' : 'Advanced Configuration' }}</span>
+              <span>{{
+                showAdvanced ? "Hide Configuration" : "Advanced Configuration"
+              }}</span>
               <ChevronDown v-if="!showAdvanced" class="h-3 w-3" />
               <ChevronUp v-else class="h-3 w-3" />
             </button>
@@ -213,7 +248,9 @@ function onDrop(e: DragEvent) {
             class="grid md:grid-cols-2 gap-6 p-6 bg-muted/20 rounded-lg border border-border/50 animate-in slide-in-from-top-2 fade-in duration-200"
           >
             <div class="space-y-2">
-              <label class="text-sm font-medium leading-none text-foreground">Crawl Depth</label>
+              <label class="text-sm font-medium leading-none text-foreground"
+                >Crawl Depth</label
+              >
               <Input
                 v-model.number="maxDepth"
                 type="number"
@@ -227,14 +264,122 @@ function onDrop(e: DragEvent) {
                 <span>2+ = Deep recursive (Caution)</span>
               </div>
             </div>
-            
+
             <div class="space-y-2">
-              <label class="text-sm font-medium leading-none text-foreground">Exclusions (Regex)</label>
-              <Textarea 
-                v-model="exclusions" 
+              <label class="text-sm font-medium leading-none text-foreground"
+                >Exclusions (Regex)</label
+              >
+              <Textarea
+                v-model="exclusions"
                 placeholder="/login&#10;/private"
                 class="font-mono min-h-[80px]"
               />
+            </div>
+
+            <!-- Synchronization Settings -->
+            <div class="space-y-4 pt-2 border-t border-border/50 md:col-span-2">
+              <h4
+                class="text-sm font-semibold text-foreground flex items-center gap-2"
+              >
+                <Database class="h-4 w-4" /> Synchronization
+              </h4>
+
+              <div
+                class="flex items-center justify-between p-4 bg-background/50 rounded-lg border border-border/50"
+              >
+                <div class="space-y-0.5">
+                  <label
+                    class="text-sm font-medium leading-none text-foreground block"
+                    >Auto-Sync</label
+                  >
+                  <p class="text-xs text-muted-foreground">
+                    Automatically re-crawl this source
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  :class="syncEnabled ? 'bg-primary' : 'bg-input'"
+                  @click="syncEnabled = !syncEnabled"
+                >
+                  <span class="sr-only">Use setting</span>
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out"
+                    :class="syncEnabled ? 'translate-x-5' : 'translate-x-0'"
+                  />
+                </button>
+              </div>
+
+              <div
+                v-if="syncEnabled"
+                class="space-y-2 animate-in slide-in-from-top-1 fade-in duration-200"
+              >
+                <label class="text-sm font-medium leading-none text-foreground"
+                  >Sync Frequency</label
+                >
+                <select
+                  v-model="syncSchedule"
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="minute">Every Minute (High Load)</option>
+                  <option value="hourly">Hourly</option>
+                  <option value="daily">Daily (Recommended)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Synchronization Settings -->
+            <div class="space-y-4 pt-2 border-t border-border/50 md:col-span-2">
+              <h4
+                class="text-sm font-semibold text-foreground flex items-center gap-2"
+              >
+                <Database class="h-4 w-4" /> Synchronization
+              </h4>
+
+              <div
+                class="flex items-center justify-between p-4 bg-background/50 rounded-lg border border-border/50"
+              >
+                <div class="space-y-0.5">
+                  <label
+                    class="text-sm font-medium leading-none text-foreground block"
+                    >Auto-Sync</label
+                  >
+                  <p class="text-xs text-muted-foreground">
+                    Automatically re-crawl this source
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  :class="syncEnabled ? 'bg-primary' : 'bg-input'"
+                  @click="syncEnabled = !syncEnabled"
+                >
+                  <span class="sr-only">Use setting</span>
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out"
+                    :class="syncEnabled ? 'translate-x-5' : 'translate-x-0'"
+                  />
+                </button>
+              </div>
+
+              <div
+                v-if="syncEnabled"
+                class="space-y-2 animate-in slide-in-from-top-1 fade-in duration-200"
+              >
+                <label class="text-sm font-medium leading-none text-foreground"
+                  >Sync Frequency</label
+                >
+                <select
+                  v-model="syncSchedule"
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="minute">Every Minute (High Load)</option>
+                  <option value="hourly">Hourly</option>
+                  <option value="daily">Daily (Recommended)</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -243,24 +388,32 @@ function onDrop(e: DragEvent) {
       <!-- File Form -->
       <div v-else class="space-y-6">
         <div class="space-y-2">
-          <label class="text-sm font-medium leading-none text-foreground">Source Name</label>
+          <label class="text-sm font-medium leading-none text-foreground"
+            >Source Name</label
+          >
           <div class="relative group">
-            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <FileUp class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <div
+              class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"
+            >
+              <FileUp
+                class="h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors"
+              />
             </div>
-            <Input 
-              v-model="name" 
-              type="text" 
-              placeholder="e.g., Quarterly Report 2024" 
-              :disabled="store.isLoading" 
+            <Input
+              v-model="name"
+              type="text"
+              placeholder="e.g., Quarterly Report 2024"
+              :disabled="store.isLoading"
               class="pl-12 h-14 text-lg font-mono bg-background/50 focus:bg-background transition-all shadow-sm border-muted-foreground/20 focus:border-primary"
             />
           </div>
         </div>
-        <div 
+        <div
           class="border-2 border-dashed rounded-xl p-8 transition-all text-center relative"
           :class="[
-            isDragging ? 'border-primary bg-primary/5 scale-[1.02]' : 'border-muted-foreground/25 hover:bg-muted/10 hover:border-primary/50'
+            isDragging
+              ? 'border-primary bg-primary/5 scale-[1.02]'
+              : 'border-muted-foreground/25 hover:bg-muted/10 hover:border-primary/50',
           ]"
           @dragover.prevent="isDragging = true"
           @dragleave.prevent="isDragging = false"
@@ -273,18 +426,33 @@ function onDrop(e: DragEvent) {
             class="hidden"
             @change="onFileChange"
           />
-          <label for="file-upload" class="cursor-pointer flex flex-col items-center gap-4 w-full h-full">
-            <div 
+          <label
+            for="file-upload"
+            class="cursor-pointer flex flex-col items-center gap-4 w-full h-full"
+          >
+            <div
               class="h-20 w-20 rounded-full flex items-center justify-center transition-colors mb-2"
-              :class="isDragging ? 'bg-primary/20 text-primary' : 'bg-primary/10 text-primary'"
+              :class="
+                isDragging
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-primary/10 text-primary'
+              "
             >
-              <UploadCloud class="h-10 w-10" :class="{ 'animate-bounce': isDragging }" />
+              <UploadCloud
+                class="h-10 w-10"
+                :class="{ 'animate-bounce': isDragging }"
+              />
             </div>
             <div class="space-y-1">
               <p class="text-lg font-medium text-foreground">
-                <span v-if="file" class="text-primary font-bold">{{ file.name }}</span>
+                <span v-if="file" class="text-primary font-bold">{{
+                  file.name
+                }}</span>
                 <span v-else>
-                  <span class="text-primary hover:underline">Click to upload</span> or drag and drop
+                  <span class="text-primary hover:underline"
+                    >Click to upload</span
+                  >
+                  or drag and drop
                 </span>
               </p>
               <p class="text-sm text-muted-foreground">
@@ -306,32 +474,38 @@ function onDrop(e: DragEvent) {
         </Button>
       </div>
 
-      <div v-if="store.error || validationError" class="bg-destructive/10 border border-destructive/20 rounded-md p-3 flex items-start gap-3">
-        <div class="bg-destructive text-destructive-foreground rounded-full p-0.5 mt-0.5">
+      <div
+        v-if="store.error || validationError"
+        class="bg-destructive/10 border border-destructive/20 rounded-md p-3 flex items-start gap-3"
+      >
+        <div
+          class="bg-destructive text-destructive-foreground rounded-full p-0.5 mt-0.5"
+        >
           <Plus class="h-3 w-3 rotate-45" />
         </div>
-        <p class="text-sm text-destructive font-medium">{{ store.error || validationError }}</p>
+        <p class="text-sm text-destructive font-medium">
+          {{ store.error || validationError }}
+        </p>
       </div>
     </form>
-    
+
     <Dialog v-model:open="showApiKeyAlert">
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Gemini API Key Required</DialogTitle>
           <DialogDescription>
-            You need to configure your Gemini API Key in the settings before you can ingest content. This key is required for parsing and embedding the data.
+            You need to configure your Gemini API Key in the settings before you
+            can ingest content. This key is required for parsing and embedding
+            the data.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="ghost" @click="showApiKeyAlert = false">
             Cancel
           </Button>
-          <Button @click="goToSettings">
-            Go to Settings
-          </Button>
+          <Button @click="goToSettings"> Go to Settings </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   </div>
 </template>
-

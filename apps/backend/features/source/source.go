@@ -9,23 +9,26 @@ import (
 	"regexp"
 	"time"
 
-	"qurio/apps/backend/internal/worker"
-	"qurio/apps/backend/internal/settings"
-	"qurio/apps/backend/internal/middleware"
 	"qurio/apps/backend/internal/config"
+	"qurio/apps/backend/internal/middleware"
+	"qurio/apps/backend/internal/settings"
+	"qurio/apps/backend/internal/worker"
 )
 
 type Source struct {
-	ID          string   `json:"id"`
-	Type        string   `json:"type"`
-	URL         string   `json:"url"`
-	ContentHash string   `json:"-"`
-	BodyHash    string   `json:"-"`
-	Status      string   `json:"status"`
-	MaxDepth    int      `json:"max_depth"`
-	Exclusions  []string `json:"exclusions"`
-	Name        string   `json:"name"`
-	UpdatedAt   string   `json:"updated_at"`
+	ID           string     `json:"id"`
+	Type         string     `json:"type"`
+	URL          string     `json:"url"`
+	ContentHash  string     `json:"-"`
+	BodyHash     string     `json:"-"`
+	Status       string     `json:"status"`
+	MaxDepth     int        `json:"max_depth"`
+	Exclusions   []string   `json:"exclusions"`
+	Name         string     `json:"name"`
+	SyncEnabled  bool       `json:"sync_enabled"`
+	SyncSchedule string     `json:"sync_schedule"` // minute, hourly, daily
+	LastSyncedAt *time.Time `json:"last_synced_at"`
+	UpdatedAt    string     `json:"updated_at"`
 }
 
 type SourcePage struct {
@@ -47,7 +50,7 @@ type Repository interface {
 	DeletePages(ctx context.Context, sourceID string) error
 	CountPendingPages(ctx context.Context, sourceID string) (int, error)
 	ResetStuckPages(ctx context.Context, timeout time.Duration) (int64, error)
-	
+
 	// Sources
 
 	Save(ctx context.Context, src *Source) error
@@ -58,6 +61,8 @@ type Repository interface {
 	UpdateBodyHash(ctx context.Context, id, hash string) error
 	SoftDelete(ctx context.Context, id string) error
 	Count(ctx context.Context) (int, error)
+	ListSyncDue(ctx context.Context) ([]Source, error)
+	UpdateLastSyncedAt(ctx context.Context, id string, t time.Time) error
 }
 
 type ChunkStore interface {
@@ -160,7 +165,7 @@ func (s *Service) Create(ctx context.Context, src *Source) error {
 	} else {
 		slog.Info("published ingest task", "url", src.URL, "id", src.ID, "topic", topic)
 	}
-	
+
 	return nil
 }
 

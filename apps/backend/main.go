@@ -12,6 +12,7 @@ import (
 	"qurio/apps/backend/internal/app"
 	"qurio/apps/backend/internal/config"
 	"qurio/apps/backend/internal/logger"
+	"qurio/apps/backend/internal/scheduler"
 
 	"github.com/nsqio/go-nsq"
 )
@@ -121,6 +122,13 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			}
 		}
 	}()
+
+	// 6. Scheduler (Sync)
+	if cfg.EnableAPI { // Only run scheduler in API mode (leader)
+		sched := scheduler.New(application.SourceRepo, application.SourceService)
+		sched.Start()
+		defer sched.Stop()
+	}
 
 	// 5. Start Server
 	if cfg.EnableAPI {

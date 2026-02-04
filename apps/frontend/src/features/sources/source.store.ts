@@ -22,6 +22,9 @@ export interface Source {
   updated_at?: string
   max_depth?: number
   exclusions?: string[]
+  sync_enabled?: boolean
+  sync_schedule?: string
+  last_synced_at?: string
   chunks?: Chunk[]
   total_chunks?: number
 }

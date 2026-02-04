@@ -27,8 +27,12 @@ func (r *PostgresRepo) ExistsByHash(ctx context.Context, hash string) (bool, err
 }
 
 func (r *PostgresRepo) Save(ctx context.Context, src *Source) error {
-	query := `INSERT INTO sources (type, url, content_hash, max_depth, exclusions, name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
-	return r.db.QueryRowContext(ctx, query, src.Type, src.URL, src.ContentHash, src.MaxDepth, pq.Array(src.Exclusions), src.Name).Scan(&src.ID)
+	query := `INSERT INTO sources (type, url, content_hash, max_depth, exclusions, name, sync_enabled, sync_schedule, last_synced_at) 
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
+	return r.db.QueryRowContext(ctx, query,
+		src.Type, src.URL, src.ContentHash, src.MaxDepth, pq.Array(src.Exclusions), src.Name,
+		src.SyncEnabled, src.SyncSchedule, src.LastSyncedAt,
+	).Scan(&src.ID)
 }
 
 func (r *PostgresRepo) UpdateStatus(ctx context.Context, id, status string) error {
@@ -38,7 +42,8 @@ func (r *PostgresRepo) UpdateStatus(ctx context.Context, id, status string) erro
 }
 
 func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
-	query := `SELECT id, type, url, status, max_depth, exclusions, name, updated_at FROM sources WHERE deleted_at IS NULL ORDER BY created_at DESC`
+	query := `SELECT id, type, url, status, max_depth, exclusions, name, sync_enabled, sync_schedule, last_synced_at, updated_at 
+	          FROM sources WHERE deleted_at IS NULL ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -48,7 +53,10 @@ func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
 	var sources []Source
 	for rows.Next() {
 		var s Source
-		if err := rows.Scan(&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions), &s.Name, &s.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions),
+			&s.Name, &s.SyncEnabled, &s.SyncSchedule, &s.LastSyncedAt, &s.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
 		sources = append(sources, s)
@@ -58,8 +66,12 @@ func (r *PostgresRepo) List(ctx context.Context) ([]Source, error) {
 
 func (r *PostgresRepo) Get(ctx context.Context, id string) (*Source, error) {
 	s := &Source{}
-	query := `SELECT id, type, url, status, max_depth, exclusions, name, updated_at FROM sources WHERE id = $1 AND deleted_at IS NULL`
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions), &s.Name, &s.UpdatedAt)
+	query := `SELECT id, type, url, status, max_depth, exclusions, name, sync_enabled, sync_schedule, last_synced_at, updated_at 
+	          FROM sources WHERE id = $1 AND deleted_at IS NULL`
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions),
+		&s.Name, &s.SyncEnabled, &s.SyncSchedule, &s.LastSyncedAt, &s.UpdatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -184,12 +196,45 @@ func (r *PostgresRepo) ResetStuckPages(ctx context.Context, timeout time.Duratio
 	query := `UPDATE source_pages 
               SET status = 'pending', updated_at = NOW(), error = 'timeout_reset' 
               WHERE status = 'processing' AND updated_at < $1`
-	
+
 	cutoff := time.Now().Add(-timeout)
-	
+
 	result, err := r.db.ExecContext(ctx, query, cutoff)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+func (r *PostgresRepo) ListSyncDue(ctx context.Context) ([]Source, error) {
+	// Select sources that are enabled and not deleted
+	// Checking the schedule logic here in SQL is tricky because the interval varies per row.
+	// Simpler approach: Fetch ALL enabled sources and filter in Go.
+	query := `SELECT id, type, url, status, max_depth, exclusions, name, sync_enabled, sync_schedule, last_synced_at, updated_at 
+	          FROM sources WHERE sync_enabled = true AND deleted_at IS NULL`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sources []Source
+	for rows.Next() {
+		var s Source
+		if err := rows.Scan(
+			&s.ID, &s.Type, &s.URL, &s.Status, &s.MaxDepth, pq.Array(&s.Exclusions),
+			&s.Name, &s.SyncEnabled, &s.SyncSchedule, &s.LastSyncedAt, &s.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		sources = append(sources, s)
+	}
+	return sources, nil
+}
+
+func (r *PostgresRepo) UpdateLastSyncedAt(ctx context.Context, id string, t time.Time) error {
+	query := `UPDATE sources SET last_synced_at = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, t, id)
+	return err
 }
