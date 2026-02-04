@@ -14,6 +14,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
+    volumes:
+      - qurio_weaviate:/var/lib/weaviate
   
   postgres:
     image: postgres:16-alpine
@@ -27,6 +29,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    volumes:
+      - qurio_postgres:/var/lib/postgresql/data
 
   nsqlookupd:
     image: nsqio/nsq:v1.3.0
@@ -173,3 +177,7 @@ services:
 volumes:
   qurio_uploads:
     name: qurio_uploads
+  qurio_postgres:
+    name: qurio_postgres
+  qurio_weaviate:
+    name: qurio_weaviate
